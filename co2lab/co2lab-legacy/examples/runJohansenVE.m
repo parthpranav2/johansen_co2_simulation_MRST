@@ -36,6 +36,9 @@ elseif isstring(volumesTonnes)
 end
 volumesTonnes = double(volumesTonnes);
 
+% Replace any NaN or negative values with 0
+volumesTonnes(isnan(volumesTonnes) | volumesTonnes < 0) = 0;
+
 % Sort by year and month (ascending order to get chronological sequence)
 [~, sortIdx] = sortrows([years, months], [1, 2]);
 years = years(sortIdx);
@@ -81,7 +84,7 @@ fprintf('------------------------------\n');
 %% Set time and fluid parameters
 gravity on
 
-% Total simulation time: 600 years
+% Total simulation time: 600 years (injection period + 600-25=575 years post-injection)
 T_total = 600*year();
 
 % Injection period: from first month to last month in CSV
@@ -121,8 +124,21 @@ fluidVE = initVEFluidHForm(Gt, 'mu' , [muc muw] .* centi*poise, ...
 % Set well in 3D model (same position as original)
 wellIx = [51, 51, 6, 6];
 
-% Initialize with first injection rate (will be updated in main loop)
-currentRate = volumesM3Day(1) * meter^3/day;
+% Find first non-zero rate for well initialization (handles CSV with zero rates)
+validRateIdx = find(volumesM3Day > 0, 1, 'first');
+if isempty(validRateIdx)
+    % If all rates are zero, use a small default rate
+    currentRate = 0.1 * meter^3/day;
+    fprintf('Warning: No valid injection rates found in CSV. Using default rate.\n');
+else
+    currentRate = volumesM3Day(validRateIdx) * meter^3/day;
+end
+
+% Ensure rate is positive and finite
+if ~isfinite(currentRate) || currentRate <= 0
+    currentRate = 0.1 * meter^3/day;
+    fprintf('Warning: Invalid injection rate detected. Using default rate.\n');
+end
 
 W = verticalWell([], G, rock, wellIx(1), wellIx(2), wellIx(3):wellIx(4),...
    'Type', 'rate', 'Val', currentRate, 'Radius', 0.1, 'comp_i', [1,0], ...
@@ -178,11 +194,15 @@ for i = 1:length(years)
     injectionSchedule.times(i) = totalMonths * 30.44 / 365.25; % convert to years
 end
 
+% Create a copy of well for backup (to reset structure if needed)
+W_original = W;
+WVE_original = WVE;
+
 %% Main simulation loop
 t = 0;
 totVol = 0.0;
 injectionIdx = 1;
-nextScheduleChange = injectionSchedule.times(1);
+isInjecting = true;
 
 fprintf('\nSimulating CO2 injection and migration:\n');
 fprintf('Injection period: %.2f years | Post-injection migration until year %.0f\n', ...
@@ -206,10 +226,23 @@ while t < T_total
        end
        
        currentRate = injectionSchedule.rates(injectionIdx) * meter^3/day;
-       WVE(1).val = currentRate;
+       
+       % Ensure rate is finite and non-negative
+       if ~isfinite(currentRate) || currentRate < 0
+           currentRate = 0;
+       end
+       
+       % Update well rate
+       if currentRate > 0
+           WVE(1).val = currentRate;
+           isInjecting = true;
+       else
+           % Keep well structure but mark as not injecting
+           isInjecting = false;
+       end
    else
-       % After injection stops, close the well
-       WVE = [];
+       % After injection stops
+       isInjecting = false;
    end
    
    % Adaptive time stepping: smaller steps during injection, larger after
@@ -228,19 +261,36 @@ while t < T_total
        dTplot = dT;
    end
    
-   % Solve pressure step
-   sol = solveIncompFlowVE(sol, Gt, SVE, rock, fluidVE, ...
-      'bc', bcVE, 'wells', WVE);
-   
-   % Solve transport step
-   if cpp_accel
-       [sol.h, sol.h_max] = mtransportVE(sol, Gt, dT, rock, ...
-                                fluidVE, 'bc', bcVE, 'wells', WVE, ...
-                               'gravity', norm(gravity), 'verbose', false);
+   % Solve pressure step - pass wells only if actively injecting
+   if isInjecting && currentRate > 0
+       sol = solveIncompFlowVE(sol, Gt, SVE, rock, fluidVE, ...
+          'bc', bcVE, 'wells', WVE);
    else
-      sol = explicitTransportVE(sol, Gt, dT, rock, fluidVE, ...
-                                'bc', bcVE, 'wells', WVE, ...
-                                'preComp', preComp);
+       sol = solveIncompFlowVE(sol, Gt, SVE, rock, fluidVE, ...
+          'bc', bcVE, 'wells', []);
+   end
+   
+   % Solve transport step - pass wells only if actively injecting
+   if isInjecting && currentRate > 0
+       if cpp_accel
+           [sol.h, sol.h_max] = mtransportVE(sol, Gt, dT, rock, ...
+                                    fluidVE, 'bc', bcVE, 'wells', WVE, ...
+                                   'gravity', norm(gravity), 'verbose', false);
+       else
+          sol = explicitTransportVE(sol, Gt, dT, rock, fluidVE, ...
+                                    'bc', bcVE, 'wells', WVE, ...
+                                    'preComp', preComp);
+       end
+   else
+       if cpp_accel
+           [sol.h, sol.h_max] = mtransportVE(sol, Gt, dT, rock, ...
+                                    fluidVE, 'bc', bcVE, 'wells', [], ...
+                                   'gravity', norm(gravity), 'verbose', false);
+       else
+          sol = explicitTransportVE(sol, Gt, dT, rock, fluidVE, ...
+                                    'bc', bcVE, 'wells', [], ...
+                                    'preComp', preComp);
+       end
    end
    
    % Reconstruct saturation
@@ -249,8 +299,8 @@ while t < T_total
    t = t + dT;
    
    % Compute total injected and current volumes
-   if ~isempty(WVE) && ~isempty(WVE(1).val)
-      totVol = totVol + WVE(1).val*dT;
+   if isInjecting && currentRate > 0
+      totVol = totVol + currentRate*dT;
    end
    vol = volumesVE(Gt, sol, rock2D, fluidVE);
    
@@ -258,7 +308,7 @@ while t < T_total
    fprintf('\b\b\b\b\b\b\b\b\b\b%6.1f years', convertTo(t,year));
    if mod(t, dTplot) < dT + 1e-6 || t >= T_total - 1e-6
        % Create a temporary well structure for plotting if injection is ongoing
-       if t < stopInject && ~isempty(WVE)
+       if isInjecting && currentRate > 0
            W_plot = WVE;
        else
            W_plot = [];
