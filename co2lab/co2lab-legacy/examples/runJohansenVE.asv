@@ -1,17 +1,8 @@
-%% Vertical-Averaged Simulation of the Johansen Formation
+%% Vertical-Averaged Simulation of the Johansen Formation with CSV Injection Data
 % The Johansen formation is a candidate site for large-scale CO2 storage
-% offshore the south-west coast of Norway. In the following, we will use a
-% simple vertically averaged model to simulate the early-stage migration of
-% a CO2 plume injected from a single well positioned near the main fault in
-% the formation. The formation is described by a geological model that has
-% been developed based on available seismic and well data. A more thorough
-% presentation of the geological model can be found in the script
-% <matlab:edit('showJohansen.m') showJohansen.m>
-%
-% The data files
-% necessary to run the example can be downloaded from the
-% <http://www.sintef.no/Projectweb/MatMorA/Downloads/Johansen/ MatMoRA
-% website>.
+% offshore the south-west coast of Norway. This script simulates CO2 injection
+% using actual injection rates from CSV data, followed by long-term migration
+% tracking over 600 years total.
 
 mrstModule add co2lab-common co2lab-legacy mimetic
 
@@ -19,73 +10,190 @@ mrstModule add co2lab-common co2lab-legacy mimetic
 clc;
 disp('================================================================');
 disp('   Vertical averaging applied to the Johansen formation');
+disp('   With CSV-based injection schedule and 600-year simulation');
 disp('================================================================');
 disp('');
 
+%% Read and parse CSV injection data
+csvFile = '/Users/apple/Desktop/study/programming/Matlab/Plugins/MRST-2026a/core/examples/data/Johansen/data/storage_injection.csv';
+if ~isfile(csvFile)
+    error('CSV file not found: %s', csvFile);
+end
+
+% Read the CSV file with automatic type detection
+injectionData = readtable(csvFile, 'TreatAsEmpty', '""');
+
+% Extract relevant columns
+years = table2array(injectionData(:, 'csdYear'));
+months = table2array(injectionData(:, 'csdMonth'));
+volumesTonnes = table2array(injectionData(:, 'csdVolumeInjectedMonth'));
+
+% Convert to numeric if needed (handle comma-formatted numbers)
+if iscell(volumesTonnes)
+    volumesTonnes = cellfun(@(x) str2double(strrep(x, ',', '')), volumesTonnes);
+elseif isstring(volumesTonnes)
+    volumesTonnes = str2double(strrep(volumesTonnes, ',', ''));
+end
+volumesTonnes = double(volumesTonnes);
+
+% Replace any NaN or negative values with 0
+volumesTonnes(isnan(volumesTonnes) | volumesTonnes < 0) = 0;
+
+% Sort by year and month (ascending order to get chronological sequence)
+[~, sortIdx] = sortrows([years, months], [1, 2]);
+years = years(sortIdx);
+months = months(sortIdx);
+volumesTonnes = volumesTonnes(sortIdx);
+
+% Display injection schedule
+fprintf('Injection schedule from CSV:\n');
+fprintf('Year  Month  Volume (tonnes CO2)\n');
+fprintf('--------------------------------\n');
+for i = 1:length(years)
+    fprintf('%4d  %5d  %12.0f\n', years(i), months(i), volumesTonnes(i));
+end
+fprintf('--------------------------------\n');
+
+%% Convert injection volumes from tonnes to m³/day
+% Supercritical CO2 density at 300 bar (from fluid parameters below)
+rhoc_sc = 686.54; % kg/m³
+
+% Convert tonnes to m³, then to m³/day (assuming 30.44 days/month on average)
+daysPerMonth = 30.44;
+volumesM3Day = (volumesTonnes * 1000 / rhoc_sc) / daysPerMonth;
+
+% Total injection period in months
+totalInjectionMonths = length(volumesTonnes);
+fprintf('\nInjection volumes in m³/day:\n');
+fprintf('Year  Month  Rate (m³/day)\n');
+fprintf('------------------------------\n');
+for i = 1:length(years)
+    fprintf('%4d  %5d  %12.2f\n', years(i), months(i), volumesM3Day(i));
+end
+fprintf('------------------------------\n');
+
 %% Input data and construct grid models
-% We use a sector model in given in the Eclipse input format (GRDECL). The
+% We use a sector model given in the Eclipse input format (GRDECL). The
 % model has five vertical layers in the Johansen formation and five shale
 % layers above and one below in the Dunhil and Amundsen formations. The
 % shale layers are removed and we construct the 2D VE grid of the top
 % surface, assuming that the major fault is sealing, and identify all outer
-% boundaries that are open to flow. Store grid and rock structures to file
-% to avoid time-consuming processing.
+% boundaries that are open to flow.
 [G, rock, ~, Gt, rock2D, bcIxVE] = makeJohansenVEgrid();
 
 %% Set time and fluid parameters
 gravity on
-T          = 500*year();
-stopInject = 100*year();
-dT         = 2*year();
-dTplot     = 1*dT;
+
+% Total simulation time: 600 years (injection period + 600-25=575 years post-injection)
+T_total = 600*year();
+
+% Injection period: from first month to last month in CSV
+% Calculate exact start and end times
+startYear = min(years);
+startMonth = min(months(years == startYear));
+endYear = max(years);
+endMonth = max(months(years == endYear));
+
+% Calculate time of first injection (in years from start)
+% Assuming we start simulation from the first injection month
+startTime = 0*year();
+
+% Calculate end of injection (approximate, based on last month)
+% Add ~30 days to account for last month duration
+stopInject = totalInjectionMonths * 30.44 / 365.25 * year();
+
+fprintf('\nSimulation parameters:\n');
+fprintf('Start injection time: %.2f years\n', convertTo(startTime, year));
+fprintf('Stop injection time:  %.2f years\n', convertTo(stopInject, year));
+fprintf('Total simulation time: %.0f years\n', convertTo(T_total, year));
+fprintf('\n');
 
 % Fluid data at p = 300 bar
 muw = 0.30860;  rhow = 975.86; sw    = 0.1;
-muc = 0.056641; rhoc = 686.54; srco2 = 0.2;
+muc = 0.056641; rhoc = rhoc_sc; srco2 = 0.2;
 kwm = [0.2142 0.85];
 
 fluidVE = initVEFluidHForm(Gt, 'mu' , [muc muw] .* centi*poise, ...
                              'rho', [rhoc rhow] .* kilogram/meter^3, ...
                              'sr', srco2, 'sw', sw, 'kwm', kwm);
 
-%% Read injection history
-injData = readtable('/Users/apple/Desktop/study/programming/Matlab/Plugins/MRST-2026a/core/examples/data/Johansen/data/storage_injection.csv');
-
-% Monthly injected volume (m^3)
-monthlyVolume = injData.csdVolumeInjectedMonth;
-
-% Calendar information
-yearNumber  = injData.csdYear;
-monthNumber = injData.csdMonth;
-
-% Number of days in each month
-daysInMonth = eomday(yearNumber, monthNumber);
-
-% Convert volume/month --> rate (m^3/day)
-rateHist = monthlyVolume ./ daysInMonth;
-
-% Convert to MRST units
-rateHist = rateHist * meter^3/day;
-
-% Number of months in history
-nMonths = length(rateHist);
-
 %% Set well and boundary conditions
 % We use one well placed in the center of the model, perforated in layer 6.
-% Injection rate is 1.4e4 m^3/day of supercritical CO2. Hydrostatic
-% boundary conditions are specified on all outer boundaries that are not in
-% contact with the shales; the latter are assumed to be no-flow boundaries.
+% Injection rate is specified from CSV data.
 
-% Set well in 3D model
+% Set well in 3D model (same position as original)
 wellIx = [51, 51, 6, 6];
-W = verticalWell([], G, rock,...
-   wellIx(1), wellIx(2), wellIx(3):wellIx(4),...
-   'Type','rate',...
-   'Val', rateHist(1),...
-   'Radius',0.1,...
-   'comp_i',[1 0],...
-   'name','I',...
-   'InnerProduct','ip_simple');
+
+% Find first non-zero rate for well initialization (handles CSV with zero rates)
+validRateIdx = find(volumesM3Day > 0, 1, 'first');
+if isempty(validRateIdx)
+    % If all rates are zero, use a small default rate
+    currentRate = 0.1 * meter^3/day;
+    fprintf('Warning: No valid injection rates found in CSV. Using default rate.\n');
+else
+    currentRate = volumesM3Day(validRateIdx) * meter^3/day;
+end
+
+% Ensure rate is positive and finite
+if ~isfinite(currentRate) || currentRate <= 0
+    currentRate = 0.1 * meter^3/day;
+    fprintf('Warning: Invalid injection rate detected. Using default rate.\n');
+end
+
+W = verticalWell([], G, rock, wellIx(1), wellIx(2), wellIx(3):wellIx(4),...
+   'Type', 'rate', 'Val', currentRate, 'Radius', 0.1, 'comp_i', [1,0], ...
+   'name', 'I', 'InnerProduct', 'ip_simple');
+
+
+
+
+
+for k = 1:height(WT)
+
+    lat = WT.Latitude(k);
+    lon = WT.Longitude(k);
+
+    perfStart = WT.PerfStart(k);
+    perfEnd   = WT.PerfEnd(k);
+
+    %% Reference well
+    refLat = 60.576425;
+    refLon = 3.443367;
+
+    refX = 51;
+    refY = 51;
+
+    cellSize = 320;      % metres per cell
+    R = 6378137;
+
+    %% Convert lat/lon to simulator coordinates
+
+    north = R * deg2rad(lat-refLat);
+    east  = R * cosd(refLat) * deg2rad(lon-refLon);
+
+    x = round(refX + east/cellSize);
+    y = round(refY + north/cellSize);
+
+    x = max(1,min(100,x));
+    y = max(1,min(100,y));
+
+    %% Add the well
+
+    W = verticalWell(W,...
+        G,...
+        rock,...
+        x,...
+        y,...
+        perfStart:perfEnd,...
+        'Type','rate',...
+        'Val',currentRate,...
+        'Radius',0.1,...
+        'comp_i',[1 0],...
+        'name',WT.WellName{k},...
+        'InnerProduct','ip_simple');
+
+end
+
 
 % Well and BC in 2D model
 WVE = convertwellsVE(W, G, Gt, rock2D);
@@ -96,15 +204,13 @@ bcVE.h = zeros(size(bcVE.face));
 
 %% Prepare simulations
 % Compute inner products and instantiate solution structure
-% For the transport simulation, the default choice is to use a
-% C-accelerated solver, but if this does not work, we use the standard
-% solver from MRST.
 SVE = computeMimeticIPVE(Gt, rock2D, 'Innerproduct','ip_simple');
 preComp = initTransportVE(Gt, rock2D);
 sol = initResSolVE(Gt, 0, 0);
 sol.wellSol = initWellSol(W, 300*barsa());
 sol.s = height2finescaleSat(sol.h, sol.h_max, Gt, fluidVE.res_water, fluidVE.res_gas);
-% select transport solver
+
+% Select transport solver
 try
    mtransportVE;
    cpp_accel = true;
@@ -112,80 +218,172 @@ catch me
    disp('mex-file for C++ acceleration not found');
    disp(['See ', fullfile(mrstPath('co2lab-legacy'),'solvers', 'VEmex','README'),...
       ' for building instructions']);
-   disp('Using matlab ve-transport');
+   disp('Using MATLAB VE-transport');
    cpp_accel = false;
 end
 
 %% Prepare plotting
-% We will make a composite plot that consists of several parts: a 3D plot
-% of the plume, a pie chart of trapped versus free volumes, a plane view of
-% the plume from above, and two cross-sections in the x/y directions
-% through the well
+% Composite plot: 3D plume, pie chart, plan view, and cross-sections
 opts = {'slice', wellIx, 'Saxis', [0 1-fluidVE.res_water], 'maxH', 100, ...
    'Wadd', 500, 'view', [-85 70], 'wireH', true, 'wireS', true};
 plotPanelVE(G, Gt, W, sol, 0.0, zeros(1,4), opts{:});
 
+%% Create injection schedule from CSV
+% Map each month in the CSV to simulation time
+% Starting from year startYear, month startMonth
+injectionSchedule = struct();
+injectionSchedule.years = years;
+injectionSchedule.months = months;
+injectionSchedule.rates = volumesM3Day';
 
-%% Main loop
-% Run the simulation using a sequential splitting with pressure and
-% transport computed in separate steps. The transport solver is formulated
-% with the height of the CO2 plume as the primary unknown and the relative
-% height (or saturation) must therefore be reconstructed.
-monthCounter = 1;
+% Calculate cumulative months from start
+injectionSchedule.times = zeros(size(years));
+for i = 1:length(years)
+    yearDiff = years(i) - startYear;
+    monthDiff = months(i) - startMonth;
+    totalMonths = yearDiff * 12 + monthDiff;
+    injectionSchedule.times(i) = totalMonths * 30.44 / 365.25; % convert to years
+end
+
+% Create a copy of well for backup (to reset structure if needed)
+W_original = W;
+WVE_original = WVE;
+
+%% Main simulation loop
 t = 0;
 totVol = 0.0;
-fprintf(1,'\nSimulating %d years on injection',convertTo(stopInject,year));
-fprintf(1,' and %d years of migration\n', convertTo(T-stopInject,year));
-fprintf(1,'Time: %4d years', convertTo(t,year));
+injectionIdx = 1;
+isInjecting = true;
+
+fprintf('\nSimulating CO2 injection and migration:\n');
+fprintf('Injection period: %.2f years | Post-injection migration until year %.0f\n', ...
+    convertTo(stopInject, year), convertTo(T_total, year));
+fprintf('Time: %6.1f years', convertTo(t,year));
+
 tic;
-while t<T
-   % Advance solution: compute pressure and then transport
-   sol = solveIncompFlowVE(sol, Gt, SVE, rock, fluidVE, ...
-      'bc', bcVE, 'wells', WVE);
-
-   if cpp_accel
-       [sol.h, sol.h_max] = mtransportVE(sol, Gt, dT, rock, ...
-                                fluidVE, 'bc', bcVE, 'wells', WVE, ...
-                               'gravity', norm(gravity), 'verbose', false);
+while t < T_total
+   % Determine current injection rate based on schedule
+   if t < stopInject
+       % Find which injection month we are in
+       % Update well rate based on closest schedule point
+       for idx = 1:length(injectionSchedule.times)-1
+           if t >= injectionSchedule.times(idx) && t < injectionSchedule.times(idx+1)
+               injectionIdx = idx;
+               break;
+           elseif t >= injectionSchedule.times(end)
+               injectionIdx = length(injectionSchedule.times);
+               break;
+           end
+       end
+       
+       currentRate = injectionSchedule.rates(injectionIdx) * meter^3/day;
+       
+       % Ensure rate is finite and non-negative
+       if ~isfinite(currentRate) || currentRate < 0
+           currentRate = 0;
+       end
+       
+       % Update well rate
+       if currentRate > 0
+           WVE(1).val = currentRate;
+           isInjecting = true;
+       else
+           % Keep well structure but mark as not injecting
+           isInjecting = false;
+       end
    else
-      sol = explicitTransportVE(sol, Gt, dT, rock, fluidVE, ...
-                                'bc', bcVE, 'wells', WVE, ...
-                                'preComp', preComp);
+       % After injection stops
+       isInjecting = false;
    end
-
-   % Reconstruct 'saturation' defined as s=h/H, where h is the height of
-   % the CO2 plume and H is the total height of the formation
+   
+   % Adaptive time stepping: smaller steps during injection, larger after
+   if t < stopInject
+       dT = 2*year();
+       dTplot = 1*dT;
+   else
+       % Post-injection: use larger time steps for efficiency
+       dT = 5*year();
+       dTplot = dT;
+   end
+   
+   % Ensure we don't overshoot the total time
+   if t + dT > T_total
+       dT = T_total - t;
+       dTplot = dT;
+   end
+   
+   % Solve pressure step - pass wells only if actively injecting
+   if isInjecting && currentRate > 0
+       sol = solveIncompFlowVE(sol, Gt, SVE, rock, fluidVE, ...
+          'bc', bcVE, 'wells', WVE);
+   else
+       sol = solveIncompFlowVE(sol, Gt, SVE, rock, fluidVE, ...
+          'bc', bcVE, 'wells', []);
+   end
+   
+   % Solve transport step - pass wells only if actively injecting
+   if isInjecting && currentRate > 0
+       if cpp_accel
+           [sol.h, sol.h_max] = mtransportVE(sol, Gt, dT, rock, ...
+                                    fluidVE, 'bc', bcVE, 'wells', WVE, ...
+                                   'gravity', norm(gravity), 'verbose', false);
+       else
+          sol = explicitTransportVE(sol, Gt, dT, rock, fluidVE, ...
+                                    'bc', bcVE, 'wells', WVE, ...
+                                    'preComp', preComp);
+       end
+   else
+       if cpp_accel
+           [sol.h, sol.h_max] = mtransportVE(sol, Gt, dT, rock, ...
+                                    fluidVE, 'bc', bcVE, 'wells', [], ...
+                                   'gravity', norm(gravity), 'verbose', false);
+       else
+          sol = explicitTransportVE(sol, Gt, dT, rock, fluidVE, ...
+                                    'bc', bcVE, 'wells', [], ...
+                                    'preComp', preComp);
+       end
+   end
+   
+   % Reconstruct saturation
    sol.s = height2finescaleSat(sol.h, sol.h_max, Gt, fluidVE.res_water, fluidVE.res_gas);
    assert( max(sol.s(:,1))<1+eps && min(sol.s(:,1))>-eps );
    t = t + dT;
-
-   % Compute total injected, trapped and free volumes of CO2
-   if ~isempty(WVE)
-      totVol = totVol + WVE.val*dT;
+   
+   % Compute total injected and current volumes
+   if isInjecting && currentRate > 0
+      totVol = totVol + currentRate*dT;
    end
    vol = volumesVE(Gt, sol, rock2D, fluidVE);
-
-   % Check if we are to stop injecting
-   if t>= stopInject
-      WVE  = []; bcVE = []; dT = 5*year(); dTplot = dT;
+   
+   % Plot at specified intervals
+   fprintf('\b\b\b\b\b\b\b\b\b\b%6.1f years', convertTo(t,year));
+   if mod(t, dTplot) < dT + 1e-6 || t >= T_total - 1e-6
+       % Create a temporary well structure for plotting if injection is ongoing
+       if isInjecting && currentRate > 0
+           W_plot = WVE;
+       else
+           W_plot = [];
+       end
+       plotPanelVE(G, Gt, W_plot, sol, t, [vol totVol], opts{:});
+       drawnow
    end
-
-   % Plotting
-   fprintf(1,'\b\b\b\b\b\b\b\b\b\b%4d years', convertTo(t,year));
-   if mod(t,dTplot)~= 0 && t<T
-      continue
-   else
-      plotPanelVE(G, Gt, W, sol, t, [vol totVol], opts{:});
-      drawnow
-   end
-%    break
 end
-fprintf(1,'\n\n');
 
-% delete C++ simulator
+fprintf('\n\n');
+
+% Cleanup
 if cpp_accel, mtransportVE(); end
 etime = toc;
-disp(['Elapsed simulation time: ', num2str(etime), ' seconds.']);
+
+%% Summary statistics
+fprintf('========================================\n');
+fprintf('Simulation complete!\n');
+fprintf('Elapsed computation time: %.1f seconds\n', etime);
+fprintf('Total CO2 injected: %.3e m³\n', totVol);
+fprintf('Final plume height (max): %.2f m\n', max(sol.h));
+fprintf('Final trapped CO2: %.3e m³\n', vol(2));
+fprintf('Final free CO2: %.3e m³\n', vol(1));
+fprintf('========================================\n');
 
 %%
 % <html>
