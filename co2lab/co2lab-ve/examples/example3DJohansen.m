@@ -563,30 +563,37 @@ fprintf('Output folder: %s\n\n', outputDir);
 tVec = tYears;   % [nSteps x 1]  years
 
 % Active-well registry: name, cells, grid position
-obsWells = struct('name',{},'cells',{},'gI',{},'gJ',{},'perfFrom',{},'perfTo',{});
+obsWells = struct('name',{},'gI',{},'gJ',{},'layers',{},'layerCells',{});
 
 for r = 1:height(wellLoc)
     if ~inBounds(r); continue; end   % outside Cartesian box
 
     gI = wellLoc.GridI(r);
     gJ = wellLoc.GridJ(r);
-    pF = wellLoc.PERF_FROM(r);
-    pT = wellLoc.PERF_TO(r);
-    perfK = pF:pT;
+    
+    layersToExtract = 6:10;
+    layerCells = cell(length(layersToExtract), 1);
+    hasAnyActive = false;
+    
+    for k_idx = 1:length(layersToExtract)
+        k = layersToExtract(k_idx);
+        wc_g = false(G.cartDims);
+        wc_g(gI, gJ, k) = true;
+        wc = find(wc_g(G.cells.indexMap));
+        layerCells{k_idx} = wc;
+        if ~isempty(wc)
+            hasAnyActive = true;
+        end
+    end
 
-    wc_g = false(G.cartDims);
-    wc_g(gI, gJ, perfK) = true;
-    wc = find(wc_g(G.cells.indexMap));
+    if ~hasAnyActive; continue; end    % no active cells in layers 6-10
 
-    if isempty(wc); continue; end    % no active cells
-
-    entry.name     = char(wellLoc.Well_Bore_Name(r));
-    entry.cells    = wc;
-    entry.gI       = gI;
-    entry.gJ       = gJ;
-    entry.perfFrom = pF;
-    entry.perfTo   = pT;
-    obsWells(end+1) = entry; %#ok<AGROW>
+    entry.name       = char(wellLoc.Well_Bore_Name(r));
+    entry.gI         = gI;
+    entry.gJ         = gJ;
+    entry.layers     = layersToExtract;
+    entry.layerCells = layerCells;
+    obsWells(end+1)  = entry; %#ok<AGROW>
 end
 
 fprintf('Found %d in-reservoir observation wells (from well_loc.csv).\n\n', ...
@@ -596,30 +603,45 @@ fprintf('Found %d in-reservoir observation wells (from well_loc.csv).\n\n', ...
 nSteps = numel(states);
 
 for ow = 1:numel(obsWells)
-    wName  = obsWells(ow).name;
-    wc     = obsWells(ow).cells;
+    wName      = obsWells(ow).name;
+    layers     = obsWells(ow).layers;
+    layerCells = obsWells(ow).layerCells;
 
     % Sanitise well name for use as filename (remove / and spaces)
     safeName = regexprep(wName, '[/ ]', '_');
 
-    % Pre-allocate time-series matrix: [nSteps x 4]
-    %   Col 1: Time_yr
-    %   Col 2: Mean_Pressure_bar   (mean over perforated cells)
-    %   Col 3: Mean_CO2_Saturation (mean over perforated cells)
-    %   Col 4: Mean_Depth_m        (constant — centroid depth of perf cells)
-    tsMat = zeros(nSteps, 4);
-
-    meanDepth = mean(G.cells.centroids(wc, 3));   % constant across time
+    % Setup columns: Time_yr, (P_bar_Lx, S_CO2_Lx, Depth_m_Lx) per layer
+    numCols = 1 + length(layers) * 3;
+    tsMat = zeros(nSteps, numCols);
+    
+    varNames = {'Time_yr'};
+    for k_idx = 1:length(layers)
+        k = layers(k_idx);
+        varNames{end+1} = sprintf('P_bar_L%d', k);
+        varNames{end+1} = sprintf('S_CO2_L%d', k);
+        varNames{end+1} = sprintf('Depth_m_L%d', k);
+    end
 
     for t = 1:nSteps
-        pBar  = mean(states{t}.pressure(wc)) / barsa;
-        sCO2  = mean(states{t}.s(wc, 2));
-        tsMat(t,:) = [tVec(t), pBar, sCO2, meanDepth];
+        tsMat(t, 1) = tVec(t);
+        col = 2;
+        for k_idx = 1:length(layers)
+            wc = layerCells{k_idx};
+            if isempty(wc)
+                tsMat(t, col)   = NaN;
+                tsMat(t, col+1) = NaN;
+                tsMat(t, col+2) = NaN;
+            else
+                tsMat(t, col)   = mean(states{t}.pressure(wc)) / barsa;
+                tsMat(t, col+1) = mean(states{t}.s(wc, 2));
+                tsMat(t, col+2) = mean(G.cells.centroids(wc, 3));
+            end
+            col = col + 3;
+        end
     end
 
     % Write CSV
-    T_export = array2table(tsMat, ...
-        'VariableNames', {'Time_yr', 'Pressure_bar', 'CO2_Saturation', 'Mean_Depth_m'});
+    T_export = array2table(tsMat, 'VariableNames', varNames);
     csvPath = fullfile(outputDir, [safeName, '.csv']);
     writetable(T_export, csvPath);
 
@@ -680,19 +702,25 @@ fprintf(fid, '%-25s  %6s  %6s  %6s  %6s  %12s  %20s\n', ...
 fprintf(fid, '%s\n', repmat('-', 1, 90));
 for ow = 1:numel(obsWells)
     safeName  = regexprep(obsWells(ow).name, '[/ ]', '_');
-    meanDepth = mean(G.cells.centroids(obsWells(ow).cells, 3));
+    
+    % Compute mean depth over all extracted layers
+    allCells = vertcat(obsWells(ow).layerCells{:});
+    meanDepth = mean(G.cells.centroids(allCells, 3));
+    minLayer = min(obsWells(ow).layers);
+    maxLayer = max(obsWells(ow).layers);
+
     fprintf(fid, '%-25s  %6d  %6d  %6d  %6d  %12.1f  %20s\n', ...
             obsWells(ow).name, obsWells(ow).gI, obsWells(ow).gJ, ...
-            obsWells(ow).perfFrom, obsWells(ow).perfTo, ...
+            minLayer, maxLayer, ...
             meanDepth, [safeName, '.csv']);
 end
 fprintf(fid, '\n--- CSV COLUMN DEFINITIONS ---\n');
 fprintf(fid, 'Time_yr          : Simulation time [years since t=0]\n');
-fprintf(fid, 'Pressure_bar     : Mean reservoir pressure at perforated cells [bar]\n');
-fprintf(fid, 'CO2_Saturation   : Mean CO2 gas saturation at perforated cells [0-1 fraction]\n');
-fprintf(fid, 'Mean_Depth_m     : Mean depth of perforated interval [m below sea level]\n');
-fprintf(fid, '\nNOTE: Pressure and saturation are spatial means over all active\n');
-fprintf(fid, 'perforated cells at that well location. For plan wells (injectors\n');
+fprintf(fid, 'P_bar_L<k>       : Mean reservoir pressure at grid layer k [bar]\n');
+fprintf(fid, 'S_CO2_L<k>       : Mean CO2 gas saturation at grid layer k [0-1 fraction]\n');
+fprintf(fid, 'Depth_m_L<k>     : Mean depth of active cells in layer k [m below sea level]\n');
+fprintf(fid, '\nNOTE: Pressure and saturation are per-layer spatial means over all active\n');
+fprintf(fid, 'cells at that well location. For plan wells (injectors\n');
 fprintf(fid, 'and producers), the wellSol BHP is the true wellbore pressure.\n');
 fprintf(fid, '==========================================================\n');
 
