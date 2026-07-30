@@ -3,12 +3,12 @@ function plotResults(model, states, ws, schedule)
 % PLOTRESULTS Launch Master Visualization Suite for Johansen Hybrid-VE
 %
 % Description:
-%   Executes simulation post-processing engine and opens four diagnostic
-%   figure dashboards:
+%   Executes simulation post-processing engine and opens diagnostic figure dashboards:
 %     1. Pressure Buildup & Trajectory Suite (plotPressure)
 %     2. Saturation Field Map (plotSaturation)
 %     3. CO2 Plume & Mass Inventory Suite (plotPlume)
-%     4. Well Rates & BHP Performance Suite (plotWellPerformance)
+%     4. CO2 Trapping Inventory Stacked Area Distribution (plotTrappingInventory)
+%     5. Well Rates & BHP Performance Suite (plotWellPerformance)
 %
 % Inputs:
 %   model    - Reservoir model object
@@ -39,6 +39,7 @@ function plotResults(model, states, ws, schedule)
     plotPressure(model, states, resStats);
     plotSaturation(model, states);
     plotPlume(model, states, resStats);
+    plotTrappingInventory(model, states, schedule);
     
     if ~isempty(ws)
         plotWellPerformance(resStats);
