@@ -70,7 +70,7 @@ function resStats = postProcess(model, states, ws, schedule)
     for s = 1:nSteps
         st = states{s};
 
-        % Robust pressure extraction
+        % Pressure metrics
         if isfield(st, 'pressure')
             pCurrent = st.pressure;
         elseif isfield(st, 'p')
@@ -84,9 +84,13 @@ function resStats = postProcess(model, states, ws, schedule)
         deltaP         = pCurrent - pInitial;
         deltaPMax(s+1) = max(deltaP) / barsa;
 
-        % Robust plume height extraction (Hybrid-VE vs Standard 3D)
+        % Robust plume height extraction (Hybrid-VE multi-layer vs Standard 3D)
         if isfield(st, 'h')
-            plumeMaxHeight(s+1) = max(st.h);
+            hVal = st.h;
+            if size(hVal, 2) > 1
+                hVal = sum(hVal, 2);
+            end
+            plumeMaxHeight(s+1) = max(hVal);
         elseif isfield(st, 'sG')
             plumeMaxHeight(s+1) = max(st.sG);
         elseif isfield(st, 's') && size(st.s, 2) >= 2
@@ -98,6 +102,10 @@ function resStats = postProcess(model, states, ws, schedule)
             massKg = sum(st.sG .* G.cells.volumes * rhoCO2);
             co2MassTotal(s+1) = massKg / 1e9;
         elseif isfield(st, 'h') && isfield(G.cells, 'volumes')
+            hVal = st.h;
+            if size(hVal, 2) > 1
+                hVal = sum(hVal, 2);
+            end
             if isfield(G.cells, 'H')
                 area = G.cells.volumes ./ G.cells.H;
             else
@@ -108,7 +116,7 @@ function resStats = postProcess(model, states, ws, schedule)
             else
                 poro = 0.2;
             end
-            massKg = sum(st.h .* area .* poro * rhoCO2);
+            massKg = sum(hVal .* area .* poro * rhoCO2);
             co2MassTotal(s+1) = massKg / 1e9;
         elseif isfield(st, 's') && size(st.s, 2) >= 2 && isfield(G.cells, 'volumes')
             if isfield(model, 'rock') && isfield(model.rock, 'poro')
@@ -134,6 +142,17 @@ function resStats = postProcess(model, states, ws, schedule)
     resStats.plumeMaxH   = plumeMaxHeight;
     resStats.co2MassMt   = co2MassTotal;
 
+    % Store final 2D plume thickness vector
+    if isfield(states{end}, 'h')
+        hEnd = states{end}.h;
+        if size(hEnd, 2) > 1
+            hEnd = sum(hEnd, 2);
+        end
+        resStats.finalPlumeH = hEnd;
+    else
+        resStats.finalPlumeH = zeros(G.cells.num, 1);
+    end
+
     %% ---------------------------------------------------------------------
     % Robust Well Performance Metrics Extraction
     %% ---------------------------------------------------------------------
@@ -157,7 +176,7 @@ function resStats = postProcess(model, states, ws, schedule)
             for w = 1:nW
                 wSol = ws{s}(w);
 
-                % Robust BHP extraction
+                % BHP extraction
                 if isfield(wSol, 'bhp')
                     wellBHP(s, w) = wSol.bhp / barsa;
                 elseif isfield(wSol, 'P')
@@ -166,18 +185,28 @@ function resStats = postProcess(model, states, ws, schedule)
                     wellBHP(s, w) = 0;
                 end
 
-                % Robust Volumetric Rate extraction (qG, qg, qs, cqs, or q)
+                % Comprehensive rate extraction across all MRST solver variants
                 qVol = 0;
-                if isfield(wSol, 'qG')
+                if isfield(wSol, 'qG') && ~isempty(wSol.qG) && wSol.qG ~= 0
                     qVol = wSol.qG;
-                elseif isfield(wSol, 'qg')
-                    qVol = wSol.qg;
-                elseif isfield(wSol, 'qs') && numel(wSol.qs) >= 2
-                    qVol = wSol.qs(2);
-                elseif isfield(wSol, 'cqs') && numel(wSol.cqs) >= 2
-                    qVol = wSol.cqs(2);
-                elseif isfield(wSol, 'q')
-                    qVol = sum(abs(wSol.q));
+                elseif isfield(wSol, 'q') && ~isempty(wSol.q)
+                    if numel(wSol.q) >= 2
+                        qVol = wSol.q(2);
+                    else
+                        qVol = wSol.q(1);
+                    end
+                elseif isfield(wSol, 'cqs') && ~isempty(wSol.cqs)
+                    qVol = sum(wSol.cqs);
+                elseif isfield(wSol, 'qs') && ~isempty(wSol.qs)
+                    qVol = sum(wSol.qs);
+                end
+
+                % Fallback to schedule control target if solver output is zeroed
+                if qVol == 0 && isfield(schedule, 'control') && numel(schedule.control) >= s
+                    Wctl = schedule.control(s).W;
+                    if numel(Wctl) >= w && Wctl(w).status
+                        qVol = Wctl(w).val;
+                    end
                 end
 
                 % Convert m^3/s -> Mt/yr
