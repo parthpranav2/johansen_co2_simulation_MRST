@@ -5,6 +5,14 @@
 %% =========================================================================
 %  Load modules
 % =========================================================================
+close all;   % Clear previous plot windows to prevent numbering conflicts
+
+%% --- Create output folder for this run ---
+runName   = datestr(now, 'dd_mm_yyyy__HH_MM');
+outputDir = fullfile('/Users/apple/Desktop/study/programming/Matlab/Plugins/', ...
+                     'MRST-2026a/core/examples/data/Johansen/well_csvs', runName);
+mkdir(outputDir);
+
 mrstModule add ad-core ad-props ad-blackoil
 mrstModule add co2lab-common co2lab-ve co2lab-spillpoint
 mrstModule add coarsegrid
@@ -483,29 +491,82 @@ title(sprintf('Vertical X-Section CO_2 Saturation at Year %.0f (j=48)', ...
 c = colorbar; c.Label.String = 'CO_2 Saturation';
 
 %% =========================================================================
-% Figure 12: CO2 trapping inventory (MRST canonical)
-% postprocessStates3D requires all wells to be rate-type injectors.
-schedule_inj = schedule;
-for ci = 1:numel(schedule_inj.control)
-    Wci = schedule_inj.control(ci).W;
-    % Step 1: drop all producer (bhp) wells
-    Wci = Wci(strcmp({Wci.type}, 'rate'));
-    % Step 2: for every rate well that is shut-in, zero its injection rate
-    for ww = 1:numel(Wci)
-        if ~Wci(ww).status
-            Wci(ww).val = 0;
-        end
-    end
-    schedule_inj.control(ci).W = Wci;
+% Figure 12: CO2 trapping inventory — manual calculation
+% postprocessStates3D is designed for a single injector and may silently
+fprintf('Computing trapping inventory from simulation states ...\n');
+
+% --- Cell pore volumes and CO2 density at reference conditions
+cellPV     = poreVolume(G, rock);          % [m3]  pore volume per cell
+rhoc_kgm3  = rhoc;                         % CO2 density at ref P/T [kg/m3]
+Mt          = 1e9;                          % kg per Mt
+
+% --- Per-timestep trapping mass (Mt)
+nTrap     = numel(states);
+t_trap    = tYears(1:nTrap);       % time axis [yr]
+
+mass_free     = zeros(nTrap, 1);   % mobile CO2 in formation
+mass_residual = zeros(nTrap, 1);   % immobile residually trapped CO2
+
+for ts = 1:nTrap
+    sCO2 = states{ts}.s(:, 2);    % CO2 saturation per cell
+
+    % Free (mobile) CO2: saturation above residual
+    s_mobile = max(sCO2 - src, 0);
+    mass_free(ts) = sum(s_mobile .* cellPV) * rhoc_kgm3 / Mt;
+
+    % Residual CO2: capped at src, only where CO2 has been
+    s_res = min(sCO2, src);
+    mass_residual(ts) = sum(s_res .* cellPV) * rhoc_kgm3 / Mt;
 end
 
-fprintf('Running postprocessStates3D for trapping inventory ...\n');
-reports = postprocessStates3D(G, [{initState}; states], rock, fluid, ...
-                               schedule_inj, srw, src);
+% --- Cumulative injected mass from wellSol
+mass_injected = zeros(nTrap, 1);
+sPerYr = 365.25 * 24 * 3600;
+for ts = 1:nTrap
+    dtThis = schedule.step.val(ts);   % [s]
+    for w = 1:nWells
+        ws = wellSol{ts}(w);
+        if isfield(ws, 'qGs') && ws.qGs > 0
+            mass_injected(ts) = mass_injected(ts) + ws.qGs * fluid.rhoGS * dtThis / Mt;
+        end
+    end
+end
+mass_injected_cum = cumsum(mass_injected);
 
-h1 = figure('Color','w'); plot(1); ax = get(h1,'currentaxes');
-plotTrappingDistribution(ax, reports, 'legend_location','northwest');
-title('CO_2 Trapping Mass Inventory Distribution (Mt)','FontSize',13);
+% Exited = injected - (free + residual), clipped at 0
+mass_exited = max(mass_injected_cum - mass_free - mass_residual, 0);
+
+% --- Plot
+h1 = figure('Color','w');
+ax  = axes(h1);
+
+% Stack: free on top, then residual, then exited (bottom)
+% Use area() for stacked fill plot matching MRST canonical style
+tPlot = [0; t_trap];   % prepend t=0 with zeros
+
+areaData = [mass_exited, mass_residual, mass_free];
+areaData  = [[0 0 0]; areaData];   % add zero row at t=0
+
+ha = area(ax, tPlot, areaData);
+ha(1).FaceColor = [1.0, 0.55, 0.0];   % orange   — Exited / Free plume
+ha(2).FaceColor = [0.4, 0.85, 0.4];   % light green — Residual in plume
+ha(3).FaceColor = [0.0, 0.65, 0.0];   % dark green  — Structural residual
+
+legend(ax, {'Exited / Free plume', 'Residual in plume', 'Trapped residual'}, ...
+       'Location', 'northwest', 'FontSize', 10);
+xlabel(ax, 'Years since simulation start', 'FontSize', 12);
+ylabel(ax, 'Mass (MT)', 'FontSize', 12);
+title(ax, 'CO_2 Trapping Mass Inventory Distribution (Mt)', 'FontSize', 13, 'FontWeight', 'bold');
+ax.FontSize = 11;
+grid(ax, 'on');
+xlim(ax, [0 t_trap(end)]);
+try
+    saveas(h1, fullfile(outputDir, 'co2_trapping_inventory.png'));
+    fprintf('  -> Saved co2_trapping_inventory.png\n');
+catch
+    fprintf('  -> Warning: failed to save trapping plot\n');
+end
+fprintf('Trapping inventory plot complete.\n\n');
 
 %% =========================================================================
 %  Figure 13: Well performance - injection rate, brine rate, BHPs
@@ -612,12 +673,7 @@ fprintf('\n=======================================================\n');
 fprintf(' EXPORTING PER-WELL DATA\n');
 fprintf('=======================================================\n');
 
-%% --- Create output folder (same logic as mkdir_forresults.m) ---
-runName   = datestr(now, 'dd_mm_yyyy__HH_MM');
-outputDir = fullfile('/Users/apple/Desktop/study/programming/Matlab/Plugins/', ...
-                     'MRST-2026a/core/examples/data/Johansen/well_csvs', runName);
-mkdir(outputDir);
-fprintf('Output folder: %s\n\n', outputDir);
+% (outputDir was already created at the start of the script)
 
 %% --- Re-scan ALL wells in well_loc.csv for active grid blocks ---
 %  This is independent of well_plan.csv — every in-reservoir well location
@@ -834,9 +890,75 @@ fprintf(fid, '==========================================================\n');
 
 fclose(fid);
 
+%% --- Save Figures to Output Folder ---
+try
+    fprintf('Saving figures to output folder ...\n');
+    figHandles = findobj('Type', 'figure');
+    for f = 1:numel(figHandles)
+        figObj = figHandles(f);
+        % Find axes inside this figure to retrieve the title
+        axObj = findobj(figObj, 'Type', 'axes');
+        figTitle = '';
+        if ~isempty(axObj)
+            for a = 1:numel(axObj)
+                if ~isempty(axObj(a).Title.String)
+                    figTitle = axObj(a).Title.String;
+                    if iscell(figTitle)
+                        figTitle = strjoin(figTitle, ' ');
+                    end
+                    break;
+                end
+            end
+        end
+        
+        % Map title string to safe file name
+        figName = '';
+        if contains(lower(figTitle), 'porosity')
+            figName = 'model_porosity.png';
+        elseif contains(lower(figTitle), 'lateral permeability')
+            figName = 'model_perm_lateral.png';
+        elseif contains(lower(figTitle), 'vertical permeability')
+            figName = 'model_perm_vertical.png';
+        elseif contains(lower(figTitle), 'before endpoint scaling')
+            figName = 'relperm_raw.png';
+        elseif contains(lower(figTitle), 'after endpoint scaling')
+            figName = 'relperm_scaled.png';
+        elseif contains(lower(figTitle), 'well locations')
+            figName = 'well_locations.png';
+        elseif contains(lower(figTitle), 'end of injection')
+            figName = 'saturation_3d_injection_end.png';
+        elseif contains(lower(figTitle), 'end of simulation')
+            figName = 'saturation_3d_simulation_end.png';
+        elseif contains(lower(figTitle), 'pressure buildup')
+            figName = 'pressure_buildup_injection_end.png';
+        elseif contains(lower(figTitle), 'vertical x-section') && contains(lower(figTitle), sprintf('year %.0f', tYears(injEndStep)))
+            figName = 'saturation_xsec_injection_end.png';
+        elseif contains(lower(figTitle), 'vertical x-section') && contains(lower(figTitle), sprintf('year %.0f', tYears(end)))
+            figName = 'saturation_xsec_simulation_end.png';
+        elseif contains(lower(figTitle), 'trapping mass inventory')
+            figName = 'co2_trapping_inventory.png';
+        end
+        
+        % Fallback for well performance figure (which has multiple subplots, no main title)
+        if isempty(figName) && figObj.Number == 13
+            figName = 'well_performance.png';
+        end
+        
+        % If we still haven't named it, use default name with figure number
+        if isempty(figName)
+            figName = sprintf('figure_%d.png', figObj.Number);
+        end
+        
+        saveas(figObj, fullfile(outputDir, figName));
+        fprintf('  Saved Figure %d -> %s\n', figObj.Number, figName);
+    end
+catch figErr
+    fprintf('Warning: Could not save figures: %s\n', figErr.message);
+end
+
 fprintf('\n  Summary TXT -> simulation_summary.txt\n');
 fprintf('=======================================================\n');
-fprintf(' Export complete. %d CSVs + 1 TXT written to:\n', numel(obsWells));
+fprintf(' Export complete. %d CSVs, Figures + 1 TXT written to:\n', numel(obsWells));
 fprintf(' %s\n', outputDir);
 fprintf('=======================================================\n\n');
 
