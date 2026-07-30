@@ -347,6 +347,11 @@ for b = 1:numel(bpSet)-1
         sy = wellStartYr(w);
         ey = wellEndYr(w);
         Wc(w).status = double(tMid >= sy && tMid < ey);
+        
+        % FIX: MRST solvers require rate to be explicitly 0 when shut-in
+        if ~Wc(w).status && strcmp(Wc(w).type, 'rate')
+            Wc(w).val = 0;
+        end
     end
 
     % Build deduplication key from status vector
@@ -664,8 +669,51 @@ for r = 1:height(wellLoc)
     obsWells(end+1)  = entry; %#ok<AGROW>
 end
 
-fprintf('Found %d in-reservoir observation wells (from well_loc.csv).\n\n', ...
-        numel(obsWells));
+% --- Add Hardcoded Observation Well (Western Extrema on line with 31/05/07 and 31/4-3) ---
+hc_layers = 6:10;
+hc_layerCells = cell(length(hc_layers), 1);
+hc_hasActive = false;
+hc_gI = -1;
+hc_gJ = -1;
+
+for test_I = 1:51
+    test_J = round(51 - (test_I - 51) / 22);
+    
+    temp_hasActive = false;
+    temp_layerCells = cell(length(hc_layers), 1);
+    
+    for k_idx = 1:length(hc_layers)
+        k = hc_layers(k_idx);
+        wc_g = false(G.cartDims);
+        wc_g(test_I, test_J, k) = true;
+        wc = find(wc_g(G.cells.indexMap));
+        temp_layerCells{k_idx} = wc;
+        if ~isempty(wc)
+            temp_hasActive = true;
+        end
+    end
+    
+    if temp_hasActive
+        % Found the absolute furthest active grid block on this flange
+        hc_gI = test_I;
+        hc_gJ = test_J;
+        hc_layerCells = temp_layerCells;
+        hc_hasActive = true;
+        break; 
+    end
+end
+
+if hc_hasActive
+    hc_entry.name       = 'SBoundary_test_well';
+    hc_entry.gI         = hc_gI;
+    hc_entry.gJ         = hc_gJ;
+    hc_entry.layers     = hc_layers;
+    hc_entry.layerCells = hc_layerCells;
+    obsWells(end+1)     = hc_entry;
+end
+% ---------------------------------------------------------------------------
+
+fprintf('Found %d in-reservoir observation wells.\n\n', numel(obsWells));
 
 %% --- Extract and export per-well time-series CSVs ---
 nSteps = numel(states);
