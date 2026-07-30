@@ -73,7 +73,7 @@ if isfield(simCfg, 'rateMultiplier') && simCfg.rateMultiplier ~= 1.0
     end
 end
 
-schedule  = buildSchedule(W, simCfg, flCfg);
+schedule  = buildCoupledSchedule(W, simCfg, flCfg);
 
 %% -------------------------------------------------------------------------
 % Hybrid-VE Model Conversion
@@ -83,11 +83,12 @@ schedule  = buildSchedule(W, simCfg, flCfg);
     convertHybrid(model, state0, schedule);
 
 %% -------------------------------------------------------------------------
-% Simulation Execution & Post-Processing
+% Simulation Execution & Adaptive Closed-Loop Control
 %% -------------------------------------------------------------------------
 
-[ws, states, report] = ...
-    simulateHybrid(model_hyb, state_hyb, schedule_hyb);
+pSafetyLimitBar = 15.0;
+[ws, states, controlLog] = ...
+    controlPressureLoop(model_hyb, state_hyb, schedule_hyb, pSafetyLimitBar);
 
 resStats = postProcess(model_hyb, states, ws, schedule_hyb);
 
@@ -103,6 +104,7 @@ reportPath  = generateReport(model_hyb, simCfg, flCfg, resStats, econResults);
 %% -------------------------------------------------------------------------
 
 plotResults(model_hyb, states, ws, schedule_hyb);
+plotCoupledControl(controlLog, resStats);
 plotEconomics(econResults);
 
 disp(' ');
