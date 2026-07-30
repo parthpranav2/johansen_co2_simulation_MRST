@@ -7,7 +7,7 @@
 %    Initializes path structure, loads configuration & scenario parameters,
 %    sets up MRST modules, builds reservoir model, reads & validates well table,
 %    constructs schedule, converts to Hybrid-VE, executes simulation,
-%    and visualizes diagnostic results.
+%    evaluates economics, generates automated reports, and visualizes results.
 %% =========================================================================
 
 clear;
@@ -25,12 +25,12 @@ addpath(genpath(projectDir));
 % Scenario & Configuration Setup
 %% -------------------------------------------------------------------------
 
-% Options: 'base_case', 'high_rate', 'constant_rate', 'extended_inj'
 selectedScenario = 'base_case';
 
 simCfgBase = simulationConfig();
 [simCfg, scInfo] = scenarioManager(selectedScenario, simCfgBase);
-flCfg = fluidConfig();
+flCfg      = fluidConfig();
+econCfg    = economicConfig();
 
 %% -------------------------------------------------------------------------
 % MRST Module Initialization
@@ -41,7 +41,8 @@ mrstModule add ...
     ad-blackoil ...
     ad-props ...
     co2lab-common ...
-    hybrid-ve;
+    hybrid-ve ...
+    co2lab-spillpoint;
 
 gravity reset on;
 
@@ -64,7 +65,6 @@ wellTable = latLonToGrid(wellTable, G);
 wellTable = validateWellTable(wellTable, G);       % Post-mapping spatial validation
 W         = buildWells(model, rock, fluid, wellTable, simCfg, flCfg);
 
-% Apply scenario rate multiplier if set
 if isfield(simCfg, 'rateMultiplier') && simCfg.rateMultiplier ~= 1.0
     for w = 1:numel(W)
         if W(w).sign > 0
@@ -83,15 +83,30 @@ schedule  = buildSchedule(W, simCfg, flCfg);
     convertHybrid(model, state0, schedule);
 
 %% -------------------------------------------------------------------------
-% Simulation Execution & Post-Processing Visualization
+% Simulation Execution & Post-Processing
 %% -------------------------------------------------------------------------
 
 [ws, states, report] = ...
     simulateHybrid(model_hyb, state_hyb, schedule_hyb);
 
+resStats = postProcess(model_hyb, states, ws, schedule_hyb);
+
+%% -------------------------------------------------------------------------
+% Economic Assessment & Report Generation
+%% -------------------------------------------------------------------------
+
+econResults = evaluateEconomics(resStats, W, econCfg);
+reportPath  = generateReport(model_hyb, simCfg, flCfg, resStats, econResults);
+
+%% -------------------------------------------------------------------------
+% Visualization Suite
+%% -------------------------------------------------------------------------
+
 plotResults(model_hyb, states, ws, schedule_hyb);
+plotEconomics(econResults);
 
 disp(' ');
 disp('=========================================================================');
 fprintf(' HybridJohansen scenario [%s] completed successfully.\n', simCfg.scenarioName);
+fprintf(' Summary report saved to: %s\n', reportPath);
 disp('=========================================================================');
