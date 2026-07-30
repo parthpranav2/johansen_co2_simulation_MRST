@@ -342,6 +342,66 @@ fprintf('  Timesteps: %d total  (%.0f yr window)\n\n', ...
 % =========================================================================
 model = TwoPhaseWaterGasModel(G, rock, fluid, 0, 0);
 
+%% =========================================================================
+% DIRECTIONAL INJECTION — block all faces except +I (east = left in image)
+% Wells 31/01/01, 31/1-3_S, 31/2-5, 31/05/02 are deep-formation injectors.
+dirInjNames = {'31/01/01','31/1-3 S','31/2-5','31/05/02'};
+BLOCK_FACTOR = 1e-12;   % near-zero mult for blocked faces
+
+for di = 1:numel(dirInjNames)
+    tgtName = dirInjNames{di};
+    wIdx    = find(strcmp({W.name}, tgtName));
+    if isempty(wIdx)
+        fprintf('[DirInj] Well %s not in W (disabled?) — skipping\n', tgtName);
+        continue;
+    end
+
+    wCells = W(wIdx).cells;   % all perforated cells of this well
+
+    for ci = 1:numel(wCells)
+        cellId = wCells(ci);
+
+        % ── Find all faces of this cell ────────────────────────────────
+        fStart = G.cells.facePos(cellId);
+        fEnd   = G.cells.facePos(cellId + 1) - 1;
+        cellFaces = G.cells.faces(fStart:fEnd, 1);   % face global indices
+
+        for fi = 1:numel(cellFaces)
+            faceId = cellFaces(fi);
+            nbrs   = G.faces.neighbors(faceId, :);
+
+            % Skip boundary faces (one neighbour is 0)
+            if any(nbrs == 0); continue; end
+
+            % Centroid vector from this cell to its neighbour
+            otherCell = nbrs(nbrs ~= cellId);
+            dv = G.cells.centroids(otherCell,:) - G.cells.centroids(cellId,:);
+
+            % Primary direction of the face connection
+            [~, dir] = max(abs(dv));   % 1=I/x, 2=J/y, 3=K/z
+            signDir  = sign(dv(dir));
+
+            % Keep ONLY +I faces (dir==1, signDir==+1).
+            % Block everything else: -I, ±J, ±K.
+            if ~(dir == 1 && signDir > 0)
+                % Find the index of this face in model.operators.internalConn
+                opFaceIdx = find(model.operators.N(:,1) == cellId & ...
+                                 model.operators.N(:,2) == otherCell, 1);
+                if isempty(opFaceIdx)
+                    opFaceIdx = find(model.operators.N(:,1) == otherCell & ...
+                                     model.operators.N(:,2) == cellId, 1);
+                end
+                if ~isempty(opFaceIdx)
+                    model.operators.T(opFaceIdx) = ...
+                        model.operators.T(opFaceIdx) * BLOCK_FACTOR;
+                end
+            end
+        end
+    end
+    fprintf('[DirInj] %s — faces blocked (keeping +I / eastward only)\n', tgtName);
+end
+fprintf('\n');
+
 fprintf('Running simulateScheduleAD ...\n');
 [wellSol, states] = simulateScheduleAD(initState, model, schedule);
 fprintf('Simulation complete.\n\n');
