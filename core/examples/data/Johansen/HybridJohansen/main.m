@@ -69,13 +69,13 @@ schedule  = buildSchedule(W, simCfg, flCfg);
     convertHybrid(model, state0, schedule);
 
 %% -------------------------------------------------------------------------
-% Simulation Execution & Visualization
+% Simulation Execution & Post-Processing Visualization
 %% -------------------------------------------------------------------------
 
 [ws, states, report] = ...
     simulateHybrid(model_hyb, state_hyb, schedule_hyb);
 
-plotResults(model_hyb, states);
+plotResults(model_hyb, states, ws, schedule_hyb);
 
 disp(' ');
 disp('=========================================================================');
