@@ -1,19 +1,27 @@
-function schedule = buildSchedule(W)
+function schedule = buildSchedule(W, simCfg)
 %%--------------------------------------------------------------------------
 % BUILDSCHEDULE Build time-stepping schedule and active well control states
 %
 % Inputs:
-%   W        - Array of MRST well structures with startYear and endYear fields
+%   W      - Array of MRST well structures with startYear and endYear fields
+%   simCfg - (Optional) Simulation configuration structure from simulationConfig()
 %
 % Outputs:
 %   schedule - MRST schedule structure containing time steps and control blocks
 %%--------------------------------------------------------------------------
 
     %% ---------------------------------------------------------------------
-    % Simulation Time Parameters
+    % Default Configuration if not provided
     %% ---------------------------------------------------------------------
-    totalTime = 10 * year;
-    nSteps    = 100;
+    if nargin < 2 || isempty(simCfg)
+        simCfg = simulationConfig();
+    end
+
+    %% ---------------------------------------------------------------------
+    % Simulation Time Parameters from Config
+    %% ---------------------------------------------------------------------
+    totalTime = simCfg.totalTime;
+    nSteps    = simCfg.numSteps;
     dt        = rampupTimesteps(totalTime, totalTime / nSteps);
 
     %% ---------------------------------------------------------------------

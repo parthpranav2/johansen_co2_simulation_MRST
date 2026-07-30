@@ -1,19 +1,28 @@
-function W = buildWells(model, rock, fluid, T)
+function W = buildWells(model, rock, fluid, T, simCfg, flCfg)
 %%--------------------------------------------------------------------------
 % BUILDWELLS Construct MRST well structure from converted well table
 %
 % Inputs:
-%   model - TwoPhaseWaterGasModel object
-%   rock  - Rock properties structure
-%   fluid - AD fluid structure
-%   T     - Well table with Grid_X, Grid_Y, perforation ranges, and controls
+%   model  - TwoPhaseWaterGasModel object
+%   rock   - Rock properties structure
+%   fluid  - AD fluid structure
+%   T      - Well table with Grid_X, Grid_Y, perforation ranges, and controls
+%   simCfg - (Optional) Simulation config from simulationConfig()
+%   flCfg  - (Optional) Fluid config from fluidConfig()
 %
 % Outputs:
-%   W     - MRST well structure array with startYear and endYear metadata
+%   W      - MRST well structure array with startYear and endYear metadata
 %%--------------------------------------------------------------------------
 
+    if nargin < 5 || isempty(simCfg)
+        simCfg = simulationConfig();
+    end
+    if nargin < 6 || isempty(flCfg)
+        flCfg = fluidConfig();
+    end
+
     secondsPerYear = 365.25 * 24 * 3600;
-    rhoCO2          = 700; % kg/m^3 (supercritical CO2 reference density)
+    rhoCO2          = flCfg.rhoG; % Supercritical CO2 density from config
 
     fprintf('\n=====================================\n');
     fprintf('Building MRST Well Specifications\n');
@@ -88,9 +97,9 @@ function W = buildWells(model, rock, fluid, T)
             compi = [0, 1]; % Pure CO2 phase injection
             nInj  = nInj + 1;
         else
-            % Producer Setup (BHP control)
+            % Producer Setup (BHP control from config)
             type = 'bhp';
-            val  = 300 * barsa;
+            val  = simCfg.defaultProducerBHP;
 
             fprintf("Producer %-15s : %.1f bar BHP\n", ...
                 char(T.Well_Bore_Name{i}), val / barsa);
@@ -110,7 +119,7 @@ function W = buildWells(model, rock, fluid, T)
             cells, ...
             'Type',   type, ...
             'Val',    val, ...
-            'Radius', 0.15, ...
+            'Radius', simCfg.wellRadius, ...
             'Dir',    'z', ...
             'Name',   char(T.Well_Bore_Name{i}), ...
             'Comp_i', compi, ...

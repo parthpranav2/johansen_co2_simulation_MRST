@@ -1,13 +1,18 @@
-function state0 = buildState(model)
+function state0 = buildState(model, cfg)
 %%--------------------------------------------------------------------------
 % BUILDSTATE Initialize hydrostatic reservoir pressure and initial saturations
 %
 % Inputs:
-%   model  - TwoPhaseWaterGasModel instance
+%   model - TwoPhaseWaterGasModel instance
+%   cfg   - (Optional) Fluid configuration structure from fluidConfig()
 %
 % Outputs:
 %   state0 - Initial state structure containing pressure and saturations
 %%--------------------------------------------------------------------------
+
+    if nargin < 2 || isempty(cfg)
+        cfg = fluidConfig();
+    end
 
     G     = model.G;
     fluid = model.fluid;
@@ -15,7 +20,7 @@ function state0 = buildState(model)
     %% ---------------------------------------------------------------------
     % Hydrostatic Pressure Calculation
     %% ---------------------------------------------------------------------
-    pRef = 300 * barsa;
+    pRef = cfg.pRef;
     z    = G.cells.centroids(:, 3);
     rhoW = fluid.rhoWS;
 

@@ -4,10 +4,9 @@
 %  
 %  Description:
 %    Main entry point for the Hybrid-VE CO2 storage simulation framework.
-%    Initializes path structure, loads MRST modules, builds the reservoir
-%    grid and fluid model, sets up initial state, reads well configurations,
-%    constructs simulation schedule, converts to Hybrid-VE, executes
-%    simulation, and triggers post-processing visualization.
+%    Initializes path structure, loads configuration parameters, sets up MRST
+%    modules, builds reservoir model, reads wells, constructs schedule,
+%    converts to Hybrid-VE, executes simulation, and visualizes results.
 %% =========================================================================
 
 clear;
@@ -18,9 +17,15 @@ close all;
 % Path Initialization
 %% -------------------------------------------------------------------------
 
-% Add project subdirectories to MATLAB search path dynamically
 projectDir = fileparts(mfilename('fullpath'));
 addpath(genpath(projectDir));
+
+%% -------------------------------------------------------------------------
+% Configuration Setup
+%% -------------------------------------------------------------------------
+
+simCfg   = simulationConfig();
+flCfg    = fluidConfig();
 
 %% -------------------------------------------------------------------------
 % MRST Module Initialization
@@ -40,9 +45,9 @@ gravity reset on;
 %% -------------------------------------------------------------------------
 
 [G, rock] = loadJohansen();
-fluid     = buildFluid();
+fluid     = buildFluid(flCfg);
 model     = buildModel(G, rock, fluid);
-state0    = buildState(model);
+state0    = buildState(model, flCfg);
 
 %% -------------------------------------------------------------------------
 % Well & Schedule Construction
@@ -50,8 +55,8 @@ state0    = buildState(model);
 
 wellTable = readWellCSV("input/well_loc.csv");
 wellTable = latLonToGrid(wellTable, G);
-W         = buildWells(model, rock, fluid, wellTable);
-schedule  = buildSchedule(W);
+W         = buildWells(model, rock, fluid, wellTable, simCfg, flCfg);
+schedule  = buildSchedule(W, simCfg);
 
 %% -------------------------------------------------------------------------
 % Hybrid-VE Model Conversion
