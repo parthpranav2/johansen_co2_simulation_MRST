@@ -197,6 +197,14 @@ for p = 1:height(wellPlan)
     endYr   = wellPlan.End_Year(p);
     if endYr < 0; endYr = T_sim_years; end
 
+    % Skip wells that are entirely outside the simulation window.
+    % Disabled wells use Start_Year=9999 / End_Year=9999 as convention.
+    if startYr >= T_sim_years || endYr <= 0
+        fprintf('%-25s  DISABLED (Start_Year=%.0f, End_Year=%.0f outside [0, %.0f])\n', ...
+                wName, startYr, endYr, T_sim_years);
+        continue;
+    end
+
     % --- add well ---
     role = lower(char(wellPlan.Role(p)));
     if strcmp(role, 'injector')
@@ -339,9 +347,21 @@ fprintf('Simulation complete.\n\n');
 tYears = cumsum(schedule.step.val) / year;
 
 % Step index closest to injection end
-injEndYr   = max([wellEndYr(injIdx), 1]);   % last year any injector runs
+% injIdx contains indices of rate-type (injector) wells in W.
+if ~isempty(injIdx)
+    activeInjEndYrs = wellEndYr(injIdx);
+    activeInjEndYrs = min(activeInjEndYrs, T_sim_years);   % clip 9999 etc.
+    injEndYr = max(activeInjEndYrs);
+else
+    injEndYr = 0;
+end
 injEndStep = find(tYears <= injEndYr, 1, 'last');
 if isempty(injEndStep); injEndStep = 1; end
+
+fprintf('Injection end year (from CSV): %.0f yr\n', injEndYr);
+fprintf('Closest simulated timestep   : step %d / %d  (t = %.1f yr)\n', ...
+        injEndStep, numel(tYears), tYears(injEndStep));
+fprintf('Simulation end year          : %.1f yr\n\n', tYears(end));
 
 %% =========================================================================
 %  Figure 7: CO2 saturation 3D at injection end
