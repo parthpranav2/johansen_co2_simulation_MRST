@@ -13,9 +13,18 @@ function cfg = simulationConfig()
     %% ---------------------------------------------------------------------
     % Simulation Time Controls
     %% ---------------------------------------------------------------------
-    cfg.totalTimeYears = 10;            % Simulation duration (years)
-    cfg.numSteps       = 100;           % Number of timesteps
-    cfg.totalTime      = cfg.totalTimeYears * year; % Duration in seconds
+    cfg.injectionYears     = 10;           % Active CO2 injection duration (years)
+    cfg.shutinYears        = 20;           % Post-injection monitoring/shut-in duration (years)
+    cfg.totalTimeYears     = cfg.injectionYears + cfg.shutinYears; % Total time (years)
+    cfg.numSteps           = 120;          % Total number of timesteps
+    cfg.totalTime          = cfg.totalTimeYears * year; % Duration in seconds
+
+    %% ---------------------------------------------------------------------
+    % Synthetic Injection Profile Controls
+    %% ---------------------------------------------------------------------
+    % Options: 'constant', 'rampup', 'stepwise', 'seasonal'
+    cfg.injectionProfile   = 'rampup';     % Injection profile type
+    cfg.rampupYears        = 3;            % Duration of ramp-up phase (years)
 
     %% ---------------------------------------------------------------------
     % Well Defaults & Target Parameters

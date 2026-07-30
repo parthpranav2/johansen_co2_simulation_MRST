@@ -51,7 +51,7 @@ model     = buildModel(G, rock, fluid);
 state0    = buildState(model, flCfg);
 
 %% -------------------------------------------------------------------------
-% Well Construction & Validation Layer
+% Well Construction & Dynamic Scheduling
 %% -------------------------------------------------------------------------
 
 wellTable = readWellCSV("input/well_loc.csv");
@@ -59,7 +59,7 @@ wellTable = validateWellTable(wellTable);          % Pre-mapping sanity checks
 wellTable = latLonToGrid(wellTable, G);
 wellTable = validateWellTable(wellTable, G);       % Post-mapping spatial validation
 W         = buildWells(model, rock, fluid, wellTable, simCfg, flCfg);
-schedule  = buildSchedule(W, simCfg);
+schedule  = buildSchedule(W, simCfg, flCfg);
 
 %% -------------------------------------------------------------------------
 % Hybrid-VE Model Conversion
