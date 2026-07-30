@@ -5,8 +5,9 @@
 %  Description:
 %    Main entry point for the Hybrid-VE CO2 storage simulation framework.
 %    Initializes path structure, loads configuration parameters, sets up MRST
-%    modules, builds reservoir model, reads wells, constructs schedule,
-%    converts to Hybrid-VE, executes simulation, and visualizes results.
+%    modules, builds reservoir model, reads & validates well configuration,
+%    constructs schedule, converts to Hybrid-VE, executes simulation,
+%    and visualizes results.
 %% =========================================================================
 
 clear;
@@ -50,11 +51,13 @@ model     = buildModel(G, rock, fluid);
 state0    = buildState(model, flCfg);
 
 %% -------------------------------------------------------------------------
-% Well & Schedule Construction
+% Well Construction & Validation Layer
 %% -------------------------------------------------------------------------
 
 wellTable = readWellCSV("input/well_loc.csv");
+wellTable = validateWellTable(wellTable);          % Pre-mapping sanity checks
 wellTable = latLonToGrid(wellTable, G);
+wellTable = validateWellTable(wellTable, G);       % Post-mapping spatial validation
 W         = buildWells(model, rock, fluid, wellTable, simCfg, flCfg);
 schedule  = buildSchedule(W, simCfg);
 
