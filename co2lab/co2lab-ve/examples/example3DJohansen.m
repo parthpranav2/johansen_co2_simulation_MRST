@@ -278,7 +278,7 @@ bpSet = sort(unique([0; wellStartYr(:); wellEndYr(:); T_sim_years]));
 bpSet = bpSet(bpSet >= 0 & bpSet <= T_sim_years);
 
 % Containers.Map for control deduplication
-ctlMap     = containers.Map('KeyType','char','ValueType','int32');
+ctlMap     = containers.Map('KeyType','char','ValueType','double');
 schedule.control = struct('W', {}, 'bc', {});
 schedule.step.val     = [];
 schedule.step.control = [];
@@ -305,7 +305,7 @@ for b = 1:numel(bpSet)-1
         ctlIdx = numel(schedule.control) + 1;
         schedule.control(ctlIdx).W  = Wc;
         schedule.control(ctlIdx).bc = bc;
-        ctlMap(ctlKey) = int32(ctlIdx);
+        ctlMap(ctlKey) = ctlIdx;   % store as double
     end
 
     % Timestep size
@@ -403,7 +403,15 @@ c = colorbar; c.Label.String = 'CO_2 Saturation';
 schedule_inj = schedule;
 for ci = 1:numel(schedule_inj.control)
     Wci = schedule_inj.control(ci).W;
-    schedule_inj.control(ci).W = Wci(strcmp({Wci.type},'rate'));
+    % Step 1: drop all producer (bhp) wells
+    Wci = Wci(strcmp({Wci.type}, 'rate'));
+    % Step 2: for every rate well that is shut-in, zero its injection rate
+    for ww = 1:numel(Wci)
+        if ~Wci(ww).status
+            Wci(ww).val = 0;
+        end
+    end
+    schedule_inj.control(ci).W = Wci;
 end
 
 fprintf('Running postprocessStates3D for trapping inventory ...\n');
