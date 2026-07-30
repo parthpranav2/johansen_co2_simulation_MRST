@@ -43,7 +43,7 @@ You should have received a copy of the GNU General Public License
 along with MRST.  If not, see <http://www.gnu.org/licenses/>.
 %}
 
-    require matlab_bgl coarsegrid
+    require coarsegrid
     N = getNeighbourship(G);
     n1 = N(:, 1);
     n2 = N(:, 2);
@@ -60,7 +60,9 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
     % sealing transmissibilities or missing connections
     n = G.cells.num;
     A = sparse(n1, n2, T_h, n, n);
-    c_h = components(A + A');
+
+    Ggraph = graph(A + A');
+    c_h = conncomp(Ggraph)';
     
     % Generate tenative coarse grid
     CG = generateCoarseGrid(G, c_h);
@@ -96,9 +98,10 @@ along with MRST.  If not, see <http://www.gnu.org/licenses/>.
             end
         end
     end
-    A = sparse(Nc(:, 1), Nc(:, 2), T_c, CG.cells.num, CG.cells.num);
-    
-    cC = components(A + A');
+    A = sparse(Nc(:,1), Nc(:,2), T_c, CG.cells.num, CG.cells.num);
+
+    Ggraph = graph(A + A');
+    cC = conncomp(Ggraph)';
     categories = cC(CG.partition);
     categories = compressPartition(categories);
 end

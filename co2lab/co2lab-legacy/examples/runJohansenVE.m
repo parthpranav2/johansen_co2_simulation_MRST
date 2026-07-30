@@ -195,7 +195,7 @@ end
 gravity on
 
 % Total simulation time: 600 years
-T_total = 600*year();
+T_total = 3000*year();
 
 % Injection period: from first month to last month in CSV
 startYear = min(years);
