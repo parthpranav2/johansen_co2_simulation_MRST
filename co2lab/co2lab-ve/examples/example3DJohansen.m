@@ -39,7 +39,16 @@
 %% =========================================================================
 %  Load modules
 % =========================================================================
-close all;   % Clear previous plot windows to prevent numbering conflicts
+
+%% --- Headless detection ---------------------------------------------------
+% When launched by the Bayesian optimizer (-batch mode), there is no display.
+% Set HEADLESS=true to skip all figure() calls and saveas() silently.
+HEADLESS = ~usejava('desktop');
+if HEADLESS
+    fprintf('[HEADLESS MODE] Running without display — all plots suppressed.\n');
+else
+    close all;   % Clear previous plot windows to prevent numbering conflicts
+end
 
 %% --- Create output folder for this run ---
 runName   = datestr(now, 'dd_mm_yyyy__HH_MM');
@@ -56,6 +65,7 @@ mrstModule add coarsegrid
 % =========================================================================
 [G, rock, bcIx] = makeJohansenVEgrid();
 
+if ~HEADLESS
 figure; plotCellData(G, rock.poro); view(-35,15); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
 title('Porosity','FontSize',12);
@@ -68,6 +78,7 @@ figure; plotCellData(G, rock.perm(:,3)/darcy); view(-55,60); colorbar;
 set(gcf,'position',[152 419 1846 700],'color','white'); axis tight;
 set(gca,'fontsize',24); title('Vertical Permeability (mD)','FontSize',12);
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Initial state
 % =========================================================================
@@ -102,6 +113,7 @@ fluid = initSimpleADIFluid('phases', 'WG'             , ...
 
 % Rel-perm before endpoint scaling
 sw = linspace(0, 1, 200);
+if ~HEADLESS
 figure; hold on;
 plot(sw, fluid.krW(sw),   'b', 'LineWidth', 1.5);
 plot(sw, fluid.krG(1-sw), 'r', 'LineWidth', 1.5);
@@ -130,6 +142,7 @@ pe   = 5 * kilo * Pascal;
 pcWG = @(sw_) pe * sw_.^(-1/2);
 fluid.pcWG = @(sg) pcWG(max((1 - sg - srw)./(1 - srw), 1e-5));
 
+end  % ~HEADLESS
 %% =========================================================================
 %  SECTION A: Configuration
 % =========================================================================
@@ -302,6 +315,7 @@ fprintf('\nSummary: %d active wells  (%d injectors, %d producers)\n\n', ...
 %% =========================================================================
 %  SECTION E: Well location map
 % =========================================================================
+if ~HEADLESS
 figure('Color','w');
 plotGrid(G, 'facecolor','none','edgealpha',0.1);
 hold on;
@@ -315,6 +329,7 @@ end
 view(3); axis tight;
 title('Well Locations: CO_2 Injectors (red) | Brine Producers (blue)','FontSize',13);
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Boundary conditions  (unchanged from original)
 % =========================================================================
@@ -498,6 +513,7 @@ fprintf('Simulation end year          : %.1f yr\n\n', tYears(end));
 %% =========================================================================
 %  Figure 7: CO2 saturation 3D at injection end
 % =========================================================================
+if ~HEADLESS
 figure('Color','w');
 plotCellData(G, states{injEndStep}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -505,9 +521,11 @@ title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Injection)', ...
       tYears(injEndStep)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 8: CO2 saturation 3D at simulation end
 % =========================================================================
+if ~HEADLESS
 figure('Color','w');
 plotCellData(G, states{end}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -515,11 +533,13 @@ title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Simulation)', ...
       tYears(end)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 9: Pressure buildup deltaP at injection end
 %  Shows where producers are drawing down pressure
 % =========================================================================
 deltaP = (states{injEndStep}.pressure - initState.pressure) / barsa;
+if ~HEADLESS
 figure('Color','w');
 plotCellData(G, deltaP); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -527,12 +547,14 @@ title(sprintf('Pressure Buildup \\DeltaP at Year %.0f (bar)', ...
       tYears(injEndStep)), 'FontSize',13);
 c = colorbar; c.Label.String = '\DeltaP (bar)';
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figures 10-11: Vertical cross-sections through grid j=48
 % =========================================================================
 [ic, jc, ~] = ind2sub(G.cartDims, G.cells.indexMap);
 xsecMask = jc==48 & ic>18 & ic<75;
 
+if ~HEADLESS
 figure('Color','w');
 plotCellData(extractSubgrid(G, xsecMask), ...
              states{injEndStep}.s(xsecMask, 2));
@@ -549,6 +571,7 @@ title(sprintf('Vertical X-Section CO_2 Saturation at Year %.0f (j=48)', ...
       tYears(end)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation';
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 12: CO2 trapping inventory — manual calculation
 %
@@ -605,6 +628,7 @@ mass_injected_cum = cumsum(mass_injected);
 mass_exited = max(mass_injected_cum - mass_free - mass_residual, 0);
 
 % --- Plot
+if ~HEADLESS
 h1 = figure('Color','w');
 ax  = axes(h1);
 
@@ -636,6 +660,7 @@ catch
 end
 fprintf('Trapping inventory plot complete.\n\n');
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 13: Well performance - injection rate, brine rate, BHPs
 % =========================================================================
@@ -674,6 +699,7 @@ dtYr         = schedule.step.val / year;
 co2Total     = cumsum(co2MtYr   .* dtYr);
 brineTotal   = cumsum(brineMtYr .* dtYr);
 
+if ~HEADLESS
 figure('Color','w','Position',[50 50 1400 550]);
 
 % --- Subplot 1: Rates ---
@@ -715,6 +741,7 @@ subplot(1,3,3);
     legend(wellNames,'Location','northeast','FontSize',8);
     grid on; set(gca,'FontSize',11);
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Console summary
 % =========================================================================
