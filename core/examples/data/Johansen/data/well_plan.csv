@@ -1,5 +1,5 @@
 Well_Bore_Name,Role,Rate_MtPerYear,BHP_bar,Start_Year,End_Year,Perf_From,Perf_To,Notes
-31/01/01,Producer,-1,200,0,200,6,10,ACTIVE: NW flank producer for pressure relief along CO2 migration path
+31/01/01,Producer,0,-1,9999,9999,6,8,ACTIVE: NW flank producer for pressure relief along CO2 migration path
 31/11-1 S,Injector,0,-1,9999,9999,6,8,DISABLED: out of grid bounds
 31/1-3 S,Injector,0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/2-1,Injector,0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
@@ -17,8 +17,8 @@ Well_Bore_Name,Role,Rate_MtPerYear,BHP_bar,Start_Year,End_Year,Perf_From,Perf_To
 31/4-3,Injector,0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/05/02,Injector,0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/5-2 R,Injector,0,-1,9999,9999,6,8,DISABLED: same cell as 31/05/07
-31/05/07,Injector,3.5,-1,5,50,6,10,ACTIVE: Central injector - delayed start after 5yr pre-production
-31/6-1,Producer,-1,200,0,200,6,10,ACTIVE: SE flank producer for symmetric pressure drainage
+31/05/07,Injector,3.5,-1,0,50,6,6,ACTIVE: Central injector - delayed start after 5yr pre-production
+31/6-1,Producer,0,-1,9999,9999,6,8,ACTIVE: SE flank producer for symmetric pressure drainage
 31/6-2 R,Injector,0,-1,9999,9999,6,8,DISABLED: likely outside active formation cells
 31/6-3,Injector,0,-1,9999,9999,6,8,DISABLED: likely outside active formation cells
 31/6-6,Injector,0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
