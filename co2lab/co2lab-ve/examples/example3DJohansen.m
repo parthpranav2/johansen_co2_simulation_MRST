@@ -598,6 +598,180 @@ if ~isempty(prodIdx)
 end
 fprintf('=======================================================\n\n');
 
+%% =========================================================================
+%  DATA EXPORT — per-well CSV + simulation summary TXT
+%
+%  For EVERY well in well_loc.csv that has at least one active grid block
+%  in the Johansen formation (observation wells included, not just plan
+%  wells), this section exports:
+%    - One CSV : Time_yr | Pressure_bar | CO2_Saturation | Mean_Depth_m
+%    - One TXT : simulation metadata + well-specific info
+%
+%  Output folder: .../Johansen/outputs/<DD_MM_YYYY__HH_MM>/
+%  (same naming convention as mkdir_forresults.m)
+% =========================================================================
+
+fprintf('\n=======================================================\n');
+fprintf(' EXPORTING PER-WELL DATA\n');
+fprintf('=======================================================\n');
+
+%% --- Create output folder (same logic as mkdir_forresults.m) ---
+runName   = datestr(now, 'dd_mm_yyyy__HH_MM');
+outputDir = fullfile('/Users/apple/Desktop/study/programming/Matlab/Plugins/', ...
+                     'MRST-2026a/core/examples/data/Johansen/well_csvs', runName);
+mkdir(outputDir);
+fprintf('Output folder: %s\n\n', outputDir);
+
+%% --- Re-scan ALL wells in well_loc.csv for active grid blocks ---
+%  This is independent of well_plan.csv — every in-reservoir well location
+%  becomes an observation point whose pressure/saturation is extracted from
+%  the simulation states.
+
+% Time vector (already computed)
+tVec = tYears;   % [nSteps x 1]  years
+
+% Active-well registry: name, cells, grid position
+obsWells = struct('name',{},'cells',{},'gI',{},'gJ',{},'perfFrom',{},'perfTo',{});
+
+for r = 1:height(wellLoc)
+    if ~inBounds(r); continue; end   % outside Cartesian box
+
+    gI = wellLoc.GridI(r);
+    gJ = wellLoc.GridJ(r);
+    pF = wellLoc.PERF_FROM(r);
+    pT = wellLoc.PERF_TO(r);
+    perfK = pF:pT;
+
+    wc_g = false(G.cartDims);
+    wc_g(gI, gJ, perfK) = true;
+    wc = find(wc_g(G.cells.indexMap));
+
+    if isempty(wc); continue; end    % no active cells
+
+    entry.name     = char(wellLoc.Well_Bore_Name(r));
+    entry.cells    = wc;
+    entry.gI       = gI;
+    entry.gJ       = gJ;
+    entry.perfFrom = pF;
+    entry.perfTo   = pT;
+    obsWells(end+1) = entry; %#ok<AGROW>
+end
+
+fprintf('Found %d in-reservoir observation wells (from well_loc.csv).\n\n', ...
+        numel(obsWells));
+
+%% --- Extract and export per-well time-series CSVs ---
+nSteps = numel(states);
+
+for ow = 1:numel(obsWells)
+    wName  = obsWells(ow).name;
+    wc     = obsWells(ow).cells;
+
+    % Sanitise well name for use as filename (remove / and spaces)
+    safeName = regexprep(wName, '[/ ]', '_');
+
+    % Pre-allocate time-series matrix: [nSteps x 4]
+    %   Col 1: Time_yr
+    %   Col 2: Mean_Pressure_bar   (mean over perforated cells)
+    %   Col 3: Mean_CO2_Saturation (mean over perforated cells)
+    %   Col 4: Mean_Depth_m        (constant — centroid depth of perf cells)
+    tsMat = zeros(nSteps, 4);
+
+    meanDepth = mean(G.cells.centroids(wc, 3));   % constant across time
+
+    for t = 1:nSteps
+        pBar  = mean(states{t}.pressure(wc)) / barsa;
+        sCO2  = mean(states{t}.s(wc, 2));
+        tsMat(t,:) = [tVec(t), pBar, sCO2, meanDepth];
+    end
+
+    % Write CSV
+    T_export = array2table(tsMat, ...
+        'VariableNames', {'Time_yr', 'Pressure_bar', 'CO2_Saturation', 'Mean_Depth_m'});
+    csvPath = fullfile(outputDir, [safeName, '.csv']);
+    writetable(T_export, csvPath);
+
+    fprintf('  [%2d/%2d] %-25s -> %s.csv  (%d rows)\n', ...
+            ow, numel(obsWells), wName, safeName, nSteps);
+end
+
+%% --- Write simulation summary TXT ---
+txtPath = fullfile(outputDir, 'simulation_summary.txt');
+fid = fopen(txtPath, 'w');
+
+fprintf(fid, '==========================================================\n');
+fprintf(fid, '  JOHANSEN CO2 STORAGE SIMULATION — RUN SUMMARY\n');
+fprintf(fid, '==========================================================\n');
+fprintf(fid, 'Run timestamp        : %s\n', runName);
+fprintf(fid, 'Output folder        : %s\n', outputDir);
+fprintf(fid, '\n--- SIMULATION CONFIGURATION ---\n');
+fprintf(fid, 'Simulation window    : %.0f years\n', T_sim_years);
+fprintf(fid, 'Total timesteps      : %d\n', nSteps);
+fprintf(fid, 'Injection end year   : %.0f years\n', injEndYr);
+fprintf(fid, 'Grid dimensions      : %d x %d x %d (Cartesian)\n', ...
+        G.cartDims(1), G.cartDims(2), G.cartDims(3));
+fprintf(fid, 'Active cells         : %d\n', G.cells.num);
+fprintf(fid, '\n--- FLUID MODEL ---\n');
+fprintf(fid, 'Reference pressure   : %.1f bar\n', p_ref / barsa);
+fprintf(fid, 'Reference temperature: %.1f deg C\n', t_ref - 273.15);
+fprintf(fid, 'CO2 density (ref)    : %.2f kg/m3\n', rhoc);
+fprintf(fid, 'Brine density        : %.1f kg/m3\n', rhow);
+fprintf(fid, 'Residual brine sat.  : %.2f\n', srw);
+fprintf(fid, 'Residual CO2 sat.    : %.2f\n', src);
+fprintf(fid, '\n--- ACTIVE PLAN WELLS (from well_plan.csv) ---\n');
+fprintf(fid, '%-25s  %-10s  %12s  %10s  %8s  %8s\n', ...
+        'Well', 'Role', 'Rate/BHP', 'Unit', 'StartYr', 'EndYr');
+fprintf(fid, '%s\n', repmat('-', 1, 78));
+for w = 1:nWells
+    if strcmp(W(w).type, 'rate')
+        roleStr = 'Injector';
+        valStr  = sprintf('%.3f Mt/yr', W(w).val * fluid.rhoGS * 3.1557e7 / 1e9);
+        unitStr = 'Mt/yr';
+    else
+        roleStr = 'Producer';
+        valStr  = sprintf('%.1f bar', W(w).val / barsa);
+        unitStr = 'bar BHP';
+    end
+    fprintf(fid, '%-25s  %-10s  %12s  %10s  %8.0f  %8.0f\n', ...
+            W(w).name, roleStr, valStr, unitStr, ...
+            wellStartYr(w), wellEndYr(w));
+end
+fprintf(fid, '\n--- MASS BALANCE ---\n');
+fprintf(fid, 'Total CO2 injected   : %.4f Mt\n', co2Total(end));
+fprintf(fid, 'Total brine produced : %.4f Mt\n', brineTotal(end));
+if ~isempty(injIdx)
+    fprintf(fid, 'Peak injector BHP    : %.2f bar\n', max(max(wellBHP(:,injIdx))));
+end
+fprintf(fid, '\n--- OBSERVATION WELLS IN RESERVOIR (all wells with active cells) ---\n');
+fprintf(fid, '%-25s  %6s  %6s  %6s  %6s  %12s  %20s\n', ...
+        'Well', 'GridI', 'GridJ', 'LayFr', 'LayTo', 'Depth_m', 'CSV_file');
+fprintf(fid, '%s\n', repmat('-', 1, 90));
+for ow = 1:numel(obsWells)
+    safeName  = regexprep(obsWells(ow).name, '[/ ]', '_');
+    meanDepth = mean(G.cells.centroids(obsWells(ow).cells, 3));
+    fprintf(fid, '%-25s  %6d  %6d  %6d  %6d  %12.1f  %20s\n', ...
+            obsWells(ow).name, obsWells(ow).gI, obsWells(ow).gJ, ...
+            obsWells(ow).perfFrom, obsWells(ow).perfTo, ...
+            meanDepth, [safeName, '.csv']);
+end
+fprintf(fid, '\n--- CSV COLUMN DEFINITIONS ---\n');
+fprintf(fid, 'Time_yr          : Simulation time [years since t=0]\n');
+fprintf(fid, 'Pressure_bar     : Mean reservoir pressure at perforated cells [bar]\n');
+fprintf(fid, 'CO2_Saturation   : Mean CO2 gas saturation at perforated cells [0-1 fraction]\n');
+fprintf(fid, 'Mean_Depth_m     : Mean depth of perforated interval [m below sea level]\n');
+fprintf(fid, '\nNOTE: Pressure and saturation are spatial means over all active\n');
+fprintf(fid, 'perforated cells at that well location. For plan wells (injectors\n');
+fprintf(fid, 'and producers), the wellSol BHP is the true wellbore pressure.\n');
+fprintf(fid, '==========================================================\n');
+
+fclose(fid);
+
+fprintf('\n  Summary TXT -> simulation_summary.txt\n');
+fprintf('=======================================================\n');
+fprintf(' Export complete. %d CSVs + 1 TXT written to:\n', numel(obsWells));
+fprintf(' %s\n', outputDir);
+fprintf('=======================================================\n\n');
+
 %%
 % <html>
 % <p><font size="-1">
