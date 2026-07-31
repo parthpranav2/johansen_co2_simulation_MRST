@@ -865,6 +865,55 @@ if hc_hasActive
 end
 % ---------------------------------------------------------------------------
 
+% --- Add SBoundary_test_well_2 (Western Extrema inline with 31/07/01) ------
+% 31/07/01 sits at GridI=25, GridJ=32. The furthest active block
+% on the same J-flange toward the western grid edge is at I=1, J=32.
+% This is the surveillance well for the upper-left CO2 plume path.
+hc2_layers = 6:10;
+hc2_layerCells = cell(length(hc2_layers), 1);
+hc2_hasActive = false;
+hc2_gI = -1;
+hc2_gJ = -1;
+
+for test_I2 = 1:30   % scan from western edge toward 31/07/01 (I=25)
+    test_J2 = 32;    % fixed J-flange inline with 31/07/01
+    
+    temp2_hasActive = false;
+    temp2_layerCells = cell(length(hc2_layers), 1);
+    
+    for k_idx = 1:length(hc2_layers)
+        k = hc2_layers(k_idx);
+        wc_g2 = false(G.cartDims);
+        wc_g2(test_I2, test_J2, k) = true;
+        wc2 = find(wc_g2(G.cells.indexMap));
+        temp2_layerCells{k_idx} = wc2;
+        if ~isempty(wc2)
+            temp2_hasActive = true;
+        end
+    end
+    
+    if temp2_hasActive
+        hc2_gI = test_I2;
+        hc2_gJ = test_J2;
+        hc2_layerCells = temp2_layerCells;
+        hc2_hasActive = true;
+        break;   % stop at the first (westernmost) active block
+    end
+end
+
+if hc2_hasActive
+    hc2_entry.name       = 'SBoundary_test_well_2';
+    hc2_entry.gI         = hc2_gI;
+    hc2_entry.gJ         = hc2_gJ;
+    hc2_entry.layers     = hc2_layers;
+    hc2_entry.layerCells = hc2_layerCells;
+    obsWells(end+1)      = hc2_entry;
+    fprintf('[SBoundary_test_well_2] Found at GridI=%d, GridJ=%d\n', hc2_gI, hc2_gJ);
+else
+    fprintf('[SBoundary_test_well_2] WARNING: No active cells found at J=32 western edge.\n');
+end
+% ---------------------------------------------------------------------------
+
 fprintf('Found %d in-reservoir observation wells.\n\n', numel(obsWells));
 
 %% --- Extract and export per-well time-series CSVs ---
@@ -962,7 +1011,16 @@ fprintf(fid, '\n--- MASS BALANCE ---\n');
 fprintf(fid, 'Total CO2 injected   : %.4f Mt\n', co2Total(end));
 fprintf(fid, 'Total brine produced : %.4f Mt\n', brineTotal(end));
 if ~isempty(injIdx)
+    % Overall peak (kept for backward compatibility)
     fprintf(fid, 'Peak injector BHP    : %.2f bar\n', max(max(wellBHP(:,injIdx))));
+    % Per-injector peak BHP — read by BO notebook for Condition 1
+    fprintf(fid, '\n--- PER-INJECTOR PEAK BHP (bar) ---\n');
+    for w_idx = 1:nWells
+        if ismember(w_idx, injIdx)
+            peak_bhp_w = max(wellBHP(:, w_idx));
+            fprintf(fid, 'BHP_WELL %-25s : %.2f bar\n', W(w_idx).name, peak_bhp_w);
+        end
+    end
 end
 fprintf(fid, '\n--- OBSERVATION WELLS IN RESERVOIR (all wells with active cells) ---\n');
 fprintf(fid, '%-25s  %6s  %6s  %6s  %6s  %12s  %20s\n', ...
@@ -1065,6 +1123,24 @@ fprintf('=======================================================\n');
 fprintf(' Export complete. %d CSVs, Figures + 1 TXT written to:\n', numel(obsWells));
 fprintf(' %s\n', outputDir);
 fprintf('=======================================================\n\n');
+
+%% =========================================================================
+%  BO Handshake Signal
+%  Write bo_signal.json so the Python optimizer knows this run is complete.
+%  This file is polled by johansen_bo_handshake.ipynb every 30 seconds.
+% =========================================================================
+boSignalPath = fullfile('/Users/apple/Desktop/study/programming/Matlab/Plugins/', ...
+    'MRST-2026a/core/examples/data/Johansen/python/bo_signal.json');
+boSignalData = sprintf('{"run_folder": "%s", "timestamp": "%s", "status": "done"}', ...
+    strrep(outputDir, '\', '/'), datestr(now, 'yyyy-mm-dd HH:MM:SS'));
+fid = fopen(boSignalPath, 'w');
+if fid ~= -1
+    fprintf(fid, '%s\n', boSignalData);
+    fclose(fid);
+    fprintf('[BO Signal] Written -> %s\n', boSignalPath);
+else
+    fprintf('[BO Signal] WARNING: Could not write signal file.\n');
+end
 
 %%
 % <html>
