@@ -1,0 +1,21 @@
+# Ignore everything by default
+*
+
+# Allow directories to be traversed so Git can find the allowed files
+!*/
+
+# Allow specific project files
+!core/examples/data/Johansen/python/*.py
+!core/examples/data/Johansen/python/*.ipynb
+!core/examples/data/Johansen/python/*.json
+!core/examples/data/Johansen/data/*.csv
+!co2lab/co2lab-ve/examples/example3DJohansen.m
+!.gitignore
+!README.md
+
+# Explicitly ignore data, models, and images even in allowed directories
+*.db
+*.pkl
+*.png
+*.mat
+core/examples/data/Johansen/well_csvs/

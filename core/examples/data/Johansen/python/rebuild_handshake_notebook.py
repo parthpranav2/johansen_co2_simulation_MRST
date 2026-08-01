@@ -280,6 +280,7 @@ def compute_reward_and_violations(co2_mt, max_bhp_bar, max_sco2_bw1, max_sco2_bw
         'sco2_violation_2': sco2_violation_2,
     }
 
+
 def clear_signal():
     if os.path.exists(SIGNAL_FILE): os.remove(SIGNAL_FILE)
 
@@ -440,132 +441,161 @@ if latest:
             breach = '🚨 BREACH' if v >= S_CO2_THRESHOLD else '✅'
             print(f'     {k:30s}: {v*100:5.2f}%  {breach}')
 
-clear_signal()
 if os.path.exists(PENDING_FILE): os.remove(PENDING_FILE)
 print('\\n✅ All pre-flight checks done. Run Cell 6 (resume) then Cell 7 (optimize).')\
 """, "c05"))
 
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# CELL 6 — Resume / Initialize Optuna Study (CRITICAL FIX)
+# CELL 6 — Smart Startup: Validate JSON → Rebuild SQLite → Ready
 # ═══════════════════════════════════════════════════════════════════════════════
 cells.append(code("""\
-# Cell 6 — Initialize or Resume Optuna Study (SQLite-persisted)
+# Cell 6 — Smart Startup (runs every session)
 #
-# KEY IMPROVEMENT: Optuna SQLite storage means the TPE sampler retains full
-# knowledge of all past trials across kernel restarts. No more "fresh study"
-# that forgets everything on resume.
+# PRIMARY SOURCE OF TRUTH: well_csvs/ folders on disk
+#
+# Steps (automatic, every time you run this cell):
+#   1. Load bo_results.json
+#   2. VALIDATE: remove OK entries whose run_folder is gone from well_csvs/
+#   3. DETECT orphan folders in well_csvs/ not yet in the JSON
+#   4. Delete + rebuild SQLite from validated JSON (always fresh, no stale state)
+#   5. Set trial_log — live object used by Cell 7 for appending + charting
 
+# ── 1. Load JSON ───────────────────────────────────────────────────────────────
 trial_log = []
-
-# ── Load legacy JSON results if they exist ────────────────────────────────────
 if os.path.exists(RESULTS_JSON):
     with open(RESULTS_JSON) as f:
         trial_log = json.load(f)
-    completed = [t for t in trial_log if t.get('status') == 'OK']
-    print(f'📂 Loaded {len(trial_log)} previous entries from bo_results.json ({len(completed)} OK)')
+    _n_ok = sum(1 for e in trial_log if e.get('status') == 'OK')
+    _n_other = len(trial_log) - _n_ok
+    print(f'📂 Loaded {len(trial_log)} entries from bo_results.json ({_n_ok} OK + {_n_other} non-OK)')
 else:
-    print('📂 No previous bo_results.json found. Starting fresh.')
+    print('📂 No bo_results.json yet — starting fresh.')
 
-# ── Constraint function for Optuna TPE ────────────────────────────────────────
-# Optuna's TPE sampler can natively handle constraints:
-# Return values ≤ 0 → feasible, > 0 → infeasible
-def optuna_constraints_func(trial):
-    bhp_v = trial.user_attrs.get('bhp_violation', 0.0)
-    sco2_v1 = trial.user_attrs.get('sco2_violation_1', 0.0)
-    sco2_v2 = trial.user_attrs.get('sco2_violation_2', 0.0)
-    return [bhp_v, sco2_v1, sco2_v2]
-
-# ── Create or load persistent Optuna study ────────────────────────────────────
-sampler = TPESampler(
-    n_startup_trials=N_WARMUP,
-    seed=42,
-    constraints_func=optuna_constraints_func,
+# ── 2. Validate against well_csvs (primary source of truth) ───────────────────
+_actual = set(
+    os.path.basename(d)
+    for d in glob.glob(f'{WELL_CSVS_ROOT}/??_??_????__??_??')
+    if os.path.isdir(d) and os.path.exists(os.path.join(d, 'simulation_summary.txt'))
 )
+
+_ok      = [e for e in trial_log if e.get('status') == 'OK']
+_other   = [e for e in trial_log if e.get('status') != 'OK']
+
+# Dedup: keep only the FIRST entry per run_folder (kills old double-count ghosts)
+_seen_folders = set()
+_deduped = []
+_dupes = 0
+for e in _ok:
+    rf = e.get('run_folder', '')
+    if rf in _seen_folders:
+        _dupes += 1
+        continue
+    _seen_folders.add(rf)
+    _deduped.append(e)
+if _dupes:
+    print(f'🧹 Removed {_dupes} duplicate JSON entries (same run_folder)')
+
+_valid   = [e for e in _deduped if e.get('run_folder','') in _actual]
+_removed = [e.get('run_folder','?') for e in _deduped if e.get('run_folder','') not in _actual]
+_orphans = _actual - {e.get('run_folder','') for e in _deduped}
+
+if _removed:
+    print(f'⚠️  Dropped {len(_removed)} stale JSON entries (folders gone from well_csvs/):')
+    for r in _removed: print(f'     ✂ {r}')
+
+if _orphans:
+    print(f'ℹ️  {len(_orphans)} well_csvs folders have no JSON entry (ran outside BO):')
+    for o in sorted(_orphans): print(f'     ? {o}')
+
+# Rebuild trial_log from validated, deduplicated data only
+trial_log = _valid + _other
+save_results(trial_log)  # Always save clean version
+
+print(f'\\n✅ Validation: {len(_valid)} OK entries confirmed | '
+      f'{len(_actual)} actual folders | {len(_orphans)} orphans')
+
+# ── 3. Constraint function ─────────────────────────────────────────────────────
+def optuna_constraints_func(trial):
+    return [trial.user_attrs.get('bhp_violation',    0.0),
+            trial.user_attrs.get('sco2_violation_1', 0.0),
+            trial.user_attrs.get('sco2_violation_2', 0.0)]
+
+# ── 4. Delete old SQLite + rebuild from validated trial_log ───────────────────
+_db_path = OPTUNA_DB.replace('sqlite:///', '')
+if os.path.exists(_db_path):
+    os.remove(_db_path)
+
+_sampler = TPESampler(n_startup_trials=N_WARMUP, seed=42,
+                      constraints_func=optuna_constraints_func)
 study = optuna.create_study(
     study_name='johansen_co2_bo_v3',
-    direction='maximize',      # maximize CO₂ stored
-    sampler=sampler,
+    direction='maximize',
+    sampler=_sampler,
     storage=OPTUNA_DB,
-    load_if_exists=True,       # ← this is what makes resume work!
+    load_if_exists=False,
 )
 
-existing_in_db = len(study.trials)
-print(f'📊 Optuna study has {existing_in_db} trials in SQLite database.')
+_dists = {
+    'Q_deep'      : FloatDistribution(*BOUNDS['Q_deep'],    step=0.05),
+    'Q_central'   : FloatDistribution(*BOUNDS['Q_central'], step=0.05),
+    'T_start_deep': IntDistribution(*BOUNDS['T_start_deep']),
+    'T_end_deep'  : IntDistribution(*BOUNDS['T_end_deep']),
+    'T_start_cen' : IntDistribution(*BOUNDS['T_start_cen']),
+    'T_end_cen'   : IntDistribution(*BOUNDS['T_end_cen']),
+}
 
-# ── Replay legacy JSON trials into Optuna (if not already there) ──────────────
-# This bridges the gap from the old JSON-only system to the new SQLite system.
-legacy_ok = [t for t in trial_log if t.get('status') == 'OK']
-replayed = 0
+for _e in _valid:
+    try:
+        _rv = compute_reward_and_violations(
+            _e.get('co2_mt', 0.0), _e.get('max_bhp_bar', 0.0),
+            _e.get('max_sco2_bw1', 0.0), _e.get('max_sco2_bw2', 0.0))
+        # Re-enforce T_end 100yr cap
+        _t_end_deep = int(min(_e.get('T_end_deep', BOUNDS['T_end_deep'][1]), BOUNDS['T_end_deep'][1]))
+        _t_end_cen  = int(min(_e.get('T_end_cen',  BOUNDS['T_end_cen'][1]),  BOUNDS['T_end_cen'][1]))
+        if (_e.get('T_end_deep',0) > BOUNDS['T_end_deep'][1] or
+                _e.get('T_end_cen', 0) > BOUNDS['T_end_cen'][1]):
+            _rv['is_feasible'] = False
+            _rv['bhp_violation'] = _rv.get('bhp_violation', 0.0) + 1.0
 
-if existing_in_db == 0 and len(legacy_ok) > 0:
-    print(f'🔄 Replaying {len(legacy_ok)} legacy trials into Optuna study...')
-    for entry in legacy_ok:
-        # Re-evaluate against NEW constraints
-        max_sco2_bw1 = entry.get('max_sco2_bw1', 0.0)
-        max_sco2_bw2 = entry.get('max_sco2_bw2', 0.0)
-        max_bhp = entry.get('max_bhp_bar', 0.0)
-        co2_mt = entry.get('co2_mt', 0.0)
-
-        rv = compute_reward_and_violations(co2_mt, max_bhp, max_sco2_bw1, max_sco2_bw2)
-
-        # Check if T_end exceeds new 100yr cap — mark as infeasible
-        t_end_deep = entry.get('T_end_deep', 0)
-        t_end_cen  = entry.get('T_end_cen', 0)
-        time_violation = max(0, t_end_deep - BOUNDS['T_end_deep'][1]) + max(0, t_end_cen - BOUNDS['T_end_cen'][1])
-
-        if time_violation > 0:
-            rv['is_feasible'] = False
-            rv['bhp_violation'] = rv.get('bhp_violation', 0) + time_violation
-            rv['reward'] = -(time_violation + rv.get('bhp_violation', 0) / BHP_LIMIT_BAR) * 1000.0
-
-        # Build Optuna trial
-        distributions = {
-            'Q_deep': FloatDistribution(*BOUNDS['Q_deep'], step=0.05),
-            'Q_central': FloatDistribution(*BOUNDS['Q_central'], step=0.05),
-            'T_start_deep': IntDistribution(*BOUNDS['T_start_deep']),
-            'T_end_deep': IntDistribution(*BOUNDS['T_end_deep']),
-            'T_start_cen': IntDistribution(*BOUNDS['T_start_cen']),
-            'T_end_cen': IntDistribution(*BOUNDS['T_end_cen']),
-        }
-        params = {
-            'Q_deep': entry['Q_deep'],
-            'Q_central': entry['Q_central'],
-            'T_start_deep': int(entry['T_start_deep']),
-            'T_end_deep': int(min(entry['T_end_deep'], BOUNDS['T_end_deep'][1])),
-            'T_start_cen': int(entry['T_start_cen']),
-            'T_end_cen': int(min(entry['T_end_cen'], BOUNDS['T_end_cen'][1])),
-        }
-
-        trial_obj = optuna.trial.create_trial(
-            params=params,
-            distributions=distributions,
-            values=[rv['reward']],
-            user_attrs={
-                'bhp_violation': rv['bhp_violation'],
-                'sco2_violation_1': rv.get('sco2_violation_1', 0.0),
-                'sco2_violation_2': rv.get('sco2_violation_2', 0.0),
-                'co2_mt': co2_mt,
-                'max_bhp_bar': max_bhp,
-                'is_feasible': rv['is_feasible'],
-                'legacy': True,
+        study.add_trial(optuna.trial.create_trial(
+            params={
+                'Q_deep'      : float(_e['Q_deep']),
+                'Q_central'   : float(_e['Q_central']),
+                'T_start_deep': int(_e['T_start_deep']),
+                'T_end_deep'  : _t_end_deep,
+                'T_start_cen' : int(_e['T_start_cen']),
+                'T_end_cen'   : _t_end_cen,
             },
-        )
-        study.add_trial(trial_obj)
-        replayed += 1
+            distributions=_dists,
+            values=[_e.get('reward', _rv['reward'])],
+            user_attrs={
+                'bhp_violation'   : _rv['bhp_violation'],
+                'sco2_violation_1': _rv['sco2_violation_1'],
+                'sco2_violation_2': _rv['sco2_violation_2'],
+                'co2_mt'          : _e.get('co2_mt', 0.0),
+                'max_bhp_bar'     : _e.get('max_bhp_bar', 0.0),
+                'is_feasible'     : _rv['is_feasible'],
+            },
+        ))
+    except Exception as _ex:
+        print(f'   ⚠️  Skipping {_e.get("run_folder","?")}: {_ex}')
 
-    print(f'   ✅ Replayed {replayed} trials. Optuna now has {len(study.trials)} trials.')
-else:
-    if existing_in_db > 0:
-        print(f'   ℹ️  Study already populated — skipping legacy replay.')
+print(f'📊 Optuna SQLite rebuilt: {len(study.trials)} trials loaded.')
 
-# Summary
-n_done = len(study.trials)
+# ── 5. Summary ────────────────────────────────────────────────────────────────
+n_done      = len(study.trials)
 n_remaining = max(0, N_TRIALS - n_done)
-print(f'\\n📋 Study status: {n_done}/{N_TRIALS} trials complete, {n_remaining} remaining.')
+_feasible   = [t for t in study.trials if t.user_attrs.get('is_feasible', False)]
+print(f'\\n📋 Study status  : {n_done}/{N_TRIALS} trials | {n_remaining} remaining')
+print(f'   Feasible     : {len(_feasible)}')
+if _feasible:
+    _best = max(_feasible, key=lambda t: t.values[0])
+    print(f'   Best CO₂     : {_best.user_attrs[\"co2_mt\"]:.2f} Mt')
 if n_remaining == 0:
-    print('   All trials done! Skip to analysis cells.')
+    print('   ✅ All trials done! Skip to Cell 8 for analysis.')
 else:
-    print('   Run Cell 7 to continue optimization.')\
+    print('   ▶ Run Cell 7 to continue optimization.')\
 """, "c06"))
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -578,9 +608,11 @@ cells.append(code("""\
 #   1. Optuna proposes parameters
 #   2. Python writes well_plan.csv + bo_pending.json
 #   3. YOU run the MATLAB simulation manually
-#   4. Come back and press Enter (or wait for bo_signal.json)
+#   4. Python watches well_csvs/ for a new folder — 1 folder = 1 trial
 #   5. Python reads results → records trial → proposes next
 #
+# Single detection source: well_csvs/ new folder only.
+# No bo_signal.json — eliminates the double-count race condition.
 # Safe to interrupt with Ctrl+C — all state is saved in SQLite + JSON.
 
 print('=' * 65)
@@ -638,34 +670,40 @@ else:
 
         # ── 3. Wait for MATLAB run ───────────────────────────────────
         print(f'\\n   ▶ Run MATLAB simulation now.')
-        print(f'   ⏳ Waiting for new run folder in {WELL_CSVS_ROOT}/ ...')
-        print(f'      (or press Enter after simulation completes)\\n')
+        print(f'   ⏳ Waiting for MATLAB signal (bo_signal.json) ...')
+        print(f'      (polls every 5 s — timeout: {POLL_TIMEOUT_SEC//60} min)\\n')
 
         try:
             t0 = time.time()
             new_folder = None
             while True:
-                # Check for new folder
-                current_latest = get_latest_run_folder()
-                if current_latest and current_latest != folder_before:
-                    # Verify it has simulation_summary.txt
-                    summary_path = os.path.join(current_latest, 'simulation_summary.txt')
-                    if os.path.exists(summary_path):
-                        new_folder = current_latest
-                        break
+                # ── Detection: bo_signal.json (primary) or new folder (fallback)
+                # Dedup guard: folder_before ensures same folder is never counted twice
+                _detected_folder = None
 
-                # Check for signal file
+                # Check signal file first (written by MATLAB at script end)
                 if os.path.exists(SIGNAL_FILE):
                     try:
                         sig = json.load(open(SIGNAL_FILE))
-                        sig_folder = sig.get('run_folder', '')
-                        if sig_folder and os.path.isdir(sig_folder):
-                            new_folder = sig_folder
-                        else:
-                            new_folder = current_latest
-                        break
+                        sf = sig.get('run_folder', '')
+                        if sf and os.path.isdir(sf):
+                            _detected_folder = sf
+                        clear_signal()  # Always delete after reading
                     except:
-                        pass
+                        clear_signal()
+
+                # Fallback: new folder in well_csvs/
+                if _detected_folder is None:
+                    current_latest = get_latest_run_folder()
+                    if current_latest and current_latest != folder_before:
+                        summary_path = os.path.join(current_latest, 'simulation_summary.txt')
+                        if os.path.exists(summary_path):
+                            _detected_folder = current_latest
+
+                # Dedup guard: only accept if it's a genuinely NEW folder
+                if _detected_folder and _detected_folder != folder_before:
+                    new_folder = _detected_folder
+                    break
 
                 # Timeout check
                 elapsed = time.time() - t0
