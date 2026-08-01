@@ -10,10 +10,16 @@
 % When launched by the Bayesian optimizer (-batch mode), there is no display.
 % Set HEADLESS=true to skip all figure() calls and saveas() silently.
 HEADLESS = ~usejava('desktop');
+SAVE_ONLY = true; % Change to false to see figures on screen
 if HEADLESS
     fprintf('[HEADLESS MODE] Running without display — all plots suppressed.\n');
 else
     close all;   % Clear previous plot windows to prevent numbering conflicts
+    if SAVE_ONLY
+        set(0, 'DefaultFigureVisible', 'off');
+    else
+        set(0, 'DefaultFigureVisible', 'on');
+    end
 end
 
 %% --- Create output folder for this run ---
@@ -1059,6 +1065,12 @@ if fid ~= -1
     fprintf('[BO Signal] Written -> %s\n', boSignalPath);
 else
     fprintf('[BO Signal] WARNING: Could not write signal file.\n');
+end
+
+% Cleanup if SAVE_ONLY is active
+if exist('SAVE_ONLY', 'var') && SAVE_ONLY && ~HEADLESS
+    close all;
+    set(0, 'DefaultFigureVisible', 'on');
 end
 
 %%
