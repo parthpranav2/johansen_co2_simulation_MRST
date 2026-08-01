@@ -14,10 +14,7 @@
 !README.md
 
 # Explicitly ignore data, models, and images even in allowed directories
-.db
-.pkl
-.png
-.mat
+
 core/examples/data/Johansen/well_csvs/
 LICENSE
 README.md
