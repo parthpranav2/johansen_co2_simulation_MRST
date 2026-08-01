@@ -1154,6 +1154,9 @@ if exist('SAVE_ONLY', 'var') && SAVE_ONLY && ~HEADLESS
     set(0, 'DefaultFigureVisible', 'on');
 end
 
+% Alert the user that the simulation is complete
+beep; pause(0.5); beep;
+
 %%
 % <html>
 % <p><font size="-1">
