@@ -1,4 +1,4 @@
-%% 3D, two-phase Johansen CO2 Storage Simulation  ― CSV-Driven Version
+ %% 3D, two-phase Johansen CO2 Storage Simulation  ― CSV-Driven Version
 %
 %  PURPOSE
 %  -------
@@ -917,6 +917,94 @@ if hc2_hasActive
     fprintf('[SBoundary_test_well_2] Found at GridI=%d, GridJ=%d\n', hc2_gI, hc2_gJ);
 else
     fprintf('[SBoundary_test_well_2] WARNING: No active cells found at J=32 western edge.\n');
+end
+% ---------------------------------------------------------------------------
+
+% --- Add SBoundary_test_well_3 (Equispaced, above SBoundary_test_well) ------
+% SBoundary_test_well is at ~J=53. Spacing is ~21 cells. So J=74.
+hc3_layers = 6:10;
+hc3_layerCells = cell(length(hc3_layers), 1);
+hc3_hasActive = false;
+hc3_gI = -1;
+hc3_gJ = -1;
+
+for test_I3 = 1:50
+    test_J3 = 74;
+    temp3_hasActive = false;
+    temp3_layerCells = cell(length(hc3_layers), 1);
+    for k_idx = 1:length(hc3_layers)
+        k = hc3_layers(k_idx);
+        wc_g3 = false(G.cartDims);
+        wc_g3(test_I3, test_J3, k) = true;
+        wc3 = find(wc_g3(G.cells.indexMap));
+        temp3_layerCells{k_idx} = wc3;
+        if ~isempty(wc3)
+            temp3_hasActive = true;
+        end
+    end
+    if temp3_hasActive
+        hc3_gI = test_I3;
+        hc3_gJ = test_J3;
+        hc3_layerCells = temp3_layerCells;
+        hc3_hasActive = true;
+        break;
+    end
+end
+
+if hc3_hasActive
+    hc3_entry.name       = 'SBoundary_test_well_3';
+    hc3_entry.gI         = hc3_gI;
+    hc3_entry.gJ         = hc3_gJ;
+    hc3_entry.layers     = hc3_layers;
+    hc3_entry.layerCells = hc3_layerCells;
+    obsWells(end+1)      = hc3_entry;
+    fprintf('[SBoundary_test_well_3] Found at GridI=%d, GridJ=%d\n', hc3_gI, hc3_gJ);
+else
+    fprintf('[SBoundary_test_well_3] WARNING: No active cells found at J=74 western edge.\n');
+end
+% ---------------------------------------------------------------------------
+
+% --- Add SBoundary_test_well_4 (Equispaced, above SBoundary_test_well_3) ------
+% J = 74 + 21 = 95
+hc4_layers = 6:10;
+hc4_layerCells = cell(length(hc4_layers), 1);
+hc4_hasActive = false;
+hc4_gI = -1;
+hc4_gJ = -1;
+
+for test_I4 = 1:50
+    test_J4 = 95;
+    temp4_hasActive = false;
+    temp4_layerCells = cell(length(hc4_layers), 1);
+    for k_idx = 1:length(hc4_layers)
+        k = hc4_layers(k_idx);
+        wc_g4 = false(G.cartDims);
+        wc_g4(test_I4, test_J4, k) = true;
+        wc4 = find(wc_g4(G.cells.indexMap));
+        temp4_layerCells{k_idx} = wc4;
+        if ~isempty(wc4)
+            temp4_hasActive = true;
+        end
+    end
+    if temp4_hasActive
+        hc4_gI = test_I4;
+        hc4_gJ = test_J4;
+        hc4_layerCells = temp4_layerCells;
+        hc4_hasActive = true;
+        break;
+    end
+end
+
+if hc4_hasActive
+    hc4_entry.name       = 'SBoundary_test_well_4';
+    hc4_entry.gI         = hc4_gI;
+    hc4_entry.gJ         = hc4_gJ;
+    hc4_entry.layers     = hc4_layers;
+    hc4_entry.layerCells = hc4_layerCells;
+    obsWells(end+1)      = hc4_entry;
+    fprintf('[SBoundary_test_well_4] Found at GridI=%d, GridJ=%d\n', hc4_gI, hc4_gJ);
+else
+    fprintf('[SBoundary_test_well_4] WARNING: No active cells found at J=95 western edge.\n');
 end
 % ---------------------------------------------------------------------------
 

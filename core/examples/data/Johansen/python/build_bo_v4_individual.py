@@ -143,7 +143,7 @@ WELL_NAMES = ['31/01/01', '31/1-3 S', '31/2-5', '31/05/07', '31/07/01']
 ALL_INJECTORS = list(WELL_NAMES)  # All 5 wells checked for BHP (Condition 1)
 
 # ─── BOUNDARY SURVEILLANCE WELLS ─────────────────────────────────────────────
-BOUNDARY_WELLS = ['SBoundary_test_well', 'SBoundary_test_well_2']
+BOUNDARY_WELLS = ['SBoundary_test_well', 'SBoundary_test_well_2', 'SBoundary_test_well_3', 'SBoundary_test_well_4']
 
 # ─── HELPER: sanitised param keys ────────────────────────────────────────────
 def _safe(well):
@@ -281,7 +281,7 @@ def parse_co2_total(folder):
     return float(m.group(1)) if m else None
 
 # ── Constraint-aware reward ───────────────────────────────────────────────────
-def compute_reward_and_violations(co2_mt, max_bhp_bar, max_sco2_bw1, max_sco2_bw2):
+def compute_reward_and_violations(co2_mt, max_bhp_bar, max_sco2_bw1, max_sco2_bw2, max_sco2_bw3=0.0, max_sco2_bw4=0.0):
     \"\"\"
     Industry-standard constraint handling for BO:
     - Feasible trials: reward = co2_mt (maximize CO₂ stored)
@@ -291,9 +291,11 @@ def compute_reward_and_violations(co2_mt, max_bhp_bar, max_sco2_bw1, max_sco2_bw
     bhp_violation = max(0.0, max_bhp_bar - BHP_LIMIT_BAR)
     sco2_violation_1 = max(0.0, (max_sco2_bw1 if max_sco2_bw1 == max_sco2_bw1 else 0.0) - S_CO2_THRESHOLD)
     sco2_violation_2 = max(0.0, (max_sco2_bw2 if max_sco2_bw2 == max_sco2_bw2 else 0.0) - S_CO2_THRESHOLD)
+    sco2_violation_3 = max(0.0, (max_sco2_bw3 if max_sco2_bw3 == max_sco2_bw3 else 0.0) - S_CO2_THRESHOLD)
+    sco2_violation_4 = max(0.0, (max_sco2_bw4 if max_sco2_bw4 == max_sco2_bw4 else 0.0) - S_CO2_THRESHOLD)
 
     cond1_breach = bhp_violation > 0
-    cond2_breach = sco2_violation_1 > 0 or sco2_violation_2 > 0
+    cond2_breach = sco2_violation_1 > 0 or sco2_violation_2 > 0 or sco2_violation_3 > 0 or sco2_violation_4 > 0
     is_feasible  = not cond1_breach and not cond2_breach
 
     if is_feasible:
@@ -301,7 +303,7 @@ def compute_reward_and_violations(co2_mt, max_bhp_bar, max_sco2_bw1, max_sco2_bw
     else:
         # Negative reward proportional to total violation
         # Scale BHP violation to same order of magnitude as saturation
-        reward = -(bhp_violation / BHP_LIMIT_BAR + sco2_violation_1 + sco2_violation_2) * 1000.0
+        reward = -(bhp_violation / BHP_LIMIT_BAR + sco2_violation_1 + sco2_violation_2 + sco2_violation_3 + sco2_violation_4) * 1000.0
 
     return {
         'reward': reward,
@@ -311,6 +313,8 @@ def compute_reward_and_violations(co2_mt, max_bhp_bar, max_sco2_bw1, max_sco2_bw
         'bhp_violation': bhp_violation,
         'sco2_violation_1': sco2_violation_1,
         'sco2_violation_2': sco2_violation_2,
+        'sco2_violation_3': sco2_violation_3,
+        'sco2_violation_4': sco2_violation_4,
     }
 
 
@@ -410,6 +414,8 @@ def render_live_chart(trial_log, current_trial_num=None, current_params=None, n_
     for bw_col, marker, label_suffix in [
         ('max_sco2_bw1', 'o', 'BW-1'),
         ('max_sco2_bw2', 's', 'BW-2'),
+        ('max_sco2_bw3', '^', 'BW-3'),
+        ('max_sco2_bw4', 'd', 'BW-4'),
     ]:
         if bw_col in df.columns:
             vals = df[bw_col].fillna(0)
@@ -552,12 +558,16 @@ def _parse_folder_full(folder):
 
     max_bhp = max(bhp_dict.values()) if bhp_dict else 0.0
     bw_keys = list(bsat_dict.keys())
-    max_sco2_bw1 = bsat_dict.get(bw_keys[0], 0.0) if len(bw_keys) > 0 else 0.0
-    max_sco2_bw2 = bsat_dict.get(bw_keys[1], 0.0) if len(bw_keys) > 1 else 0.0
+    max_sco2_bw1 = bsat_dict.get('SBoundary_test_well', 0.0)
+    max_sco2_bw2 = bsat_dict.get('SBoundary_test_well_2', 0.0)
+    max_sco2_bw3 = bsat_dict.get('SBoundary_test_well_3', 0.0)
+    max_sco2_bw4 = bsat_dict.get('SBoundary_test_well_4', 0.0)
     if max_sco2_bw1 != max_sco2_bw1: max_sco2_bw1 = 0.0
     if max_sco2_bw2 != max_sco2_bw2: max_sco2_bw2 = 0.0
+    if max_sco2_bw3 != max_sco2_bw3: max_sco2_bw3 = 0.0
+    if max_sco2_bw4 != max_sco2_bw4: max_sco2_bw4 = 0.0
 
-    rv = compute_reward_and_violations(co2_val, max_bhp, max_sco2_bw1, max_sco2_bw2)
+    rv = compute_reward_and_violations(co2_val, max_bhp, max_sco2_bw1, max_sco2_bw2, max_sco2_bw3, max_sco2_bw4)
 
     return {
         **params,
@@ -567,6 +577,8 @@ def _parse_folder_full(folder):
         'max_bhp_bar'     : max_bhp,
         'max_sco2_bw1'    : max_sco2_bw1,
         'max_sco2_bw2'    : max_sco2_bw2,
+        'max_sco2_bw3'    : max_sco2_bw3,
+        'max_sco2_bw4'    : max_sco2_bw4,
         'is_feasible'     : rv['is_feasible'],
         'cond1_breach'    : rv['cond1_breach'],
         'cond2_breach'    : rv['cond2_breach'],
@@ -607,7 +619,9 @@ print(f'   💾 bo_v4_results.json rewritten from disk data')
 def optuna_constraints_func(trial):
     return [trial.user_attrs.get('bhp_violation',    0.0),
             trial.user_attrs.get('sco2_violation_1', 0.0),
-            trial.user_attrs.get('sco2_violation_2', 0.0)]
+            trial.user_attrs.get('sco2_violation_2', 0.0),
+            trial.user_attrs.get('sco2_violation_3', 0.0),
+            trial.user_attrs.get('sco2_violation_4', 0.0)]
 
 _db_path = OPTUNA_DB.replace('sqlite:///', '')
 if os.path.exists(_db_path):
@@ -651,6 +665,8 @@ for _e in trial_log:
                 'bhp_violation'   : _e['bhp_violation'],
                 'sco2_violation_1': _e['sco2_violation_1'],
                 'sco2_violation_2': _e['sco2_violation_2'],
+                'sco2_violation_3': _e.get('sco2_violation_3', 0.0),
+                'sco2_violation_4': _e.get('sco2_violation_4', 0.0),
                 'co2_mt'          : _e['co2_mt'],
                 'max_bhp_bar'     : _e['max_bhp_bar'],
                 'is_feasible'     : _e['is_feasible'],
@@ -834,17 +850,21 @@ else:
 
         max_bhp = max(bhp_dict.values()) if bhp_dict else 0.0
         bw_keys = list(bsat_dict.keys())
-        max_sco2_bw1 = bsat_dict.get(bw_keys[0], 0.0) if len(bw_keys) > 0 else 0.0
-        max_sco2_bw2 = bsat_dict.get(bw_keys[1], 0.0) if len(bw_keys) > 1 else 0.0
+        max_sco2_bw1 = bsat_dict.get('SBoundary_test_well', 0.0)
+        max_sco2_bw2 = bsat_dict.get('SBoundary_test_well_2', 0.0)
+        max_sco2_bw3 = bsat_dict.get('SBoundary_test_well_3', 0.0)
+        max_sco2_bw4 = bsat_dict.get('SBoundary_test_well_4', 0.0)
         if max_sco2_bw1 != max_sco2_bw1: max_sco2_bw1 = 0.0
         if max_sco2_bw2 != max_sco2_bw2: max_sco2_bw2 = 0.0
+        if max_sco2_bw3 != max_sco2_bw3: max_sco2_bw3 = 0.0
+        if max_sco2_bw4 != max_sco2_bw4: max_sco2_bw4 = 0.0
 
         # ── 5. Compute reward ─────────────────────────────────────────────
-        rv = compute_reward_and_violations(co2_val, max_bhp, max_sco2_bw1, max_sco2_bw2)
+        rv = compute_reward_and_violations(co2_val, max_bhp, max_sco2_bw1, max_sco2_bw2, max_sco2_bw3, max_sco2_bw4)
 
         status_icon = '🟢' if rv['is_feasible'] else '🔴'
         print(f'   {status_icon} CO₂={co2_val:.1f} Mt  |  Max BHP={max_bhp:.1f} bar  |'
-              f'  BW1={max_sco2_bw1*100:.2f}%  BW2={max_sco2_bw2*100:.2f}%')
+              f'  BW1={max_sco2_bw1*100:.2f}%  BW2={max_sco2_bw2*100:.2f}%  BW3={max_sco2_bw3*100:.2f}%  BW4={max_sco2_bw4*100:.2f}%')
         if rv['cond1_breach']:
             print(f'      ⚠️  BHP BREACH: {max_bhp:.1f} > {BHP_LIMIT_BAR:.0f} bar')
         if rv['cond2_breach']:
@@ -855,6 +875,8 @@ else:
         trial.set_user_attr('bhp_violation', rv['bhp_violation'])
         trial.set_user_attr('sco2_violation_1', rv['sco2_violation_1'])
         trial.set_user_attr('sco2_violation_2', rv['sco2_violation_2'])
+        trial.set_user_attr('sco2_violation_3', rv['sco2_violation_3'])
+        trial.set_user_attr('sco2_violation_4', rv['sco2_violation_4'])
         trial.set_user_attr('co2_mt', co2_val)
         trial.set_user_attr('max_bhp_bar', max_bhp)
         trial.set_user_attr('is_feasible', rv['is_feasible'])
@@ -869,6 +891,8 @@ else:
             'max_bhp_bar': max_bhp,
             'max_sco2_bw1': max_sco2_bw1,
             'max_sco2_bw2': max_sco2_bw2,
+            'max_sco2_bw3': max_sco2_bw3,
+            'max_sco2_bw4': max_sco2_bw4,
             'is_feasible': rv['is_feasible'],
             'cond1_breach': rv['cond1_breach'],
             'cond2_breach': rv['cond2_breach'],
