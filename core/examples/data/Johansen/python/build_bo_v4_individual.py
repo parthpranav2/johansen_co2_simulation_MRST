@@ -142,8 +142,10 @@ POLL_TIMEOUT_SEC = 1800     # 30 min timeout waiting for MATLAB signal
 WELL_NAMES = ['31/01/01', '31/1-3 S', '31/2-5', '31/05/07', '31/07/01']
 ALL_INJECTORS = list(WELL_NAMES)  # All 5 wells checked for BHP (Condition 1)
 
-# ─── BOUNDARY SURVEILLANCE WELLS ─────────────────────────────────────────────
-BOUNDARY_WELLS = ['SBoundary_test_well', 'SBoundary_test_well_2', 'SBoundary_test_well_3', 'SBoundary_test_well_4']
+BOUNDARY_WELLS = [
+    'SBoundary_test_well', 'SBoundary_test_well_2', 'SBoundary_test_well_3', 'SBoundary_test_well_4',
+    'WFlank_test_well_1', 'WFlank_test_well_2'
+]
 
 # ─── HELPER: sanitised param keys ────────────────────────────────────────────
 def _safe(well):

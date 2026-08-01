@@ -658,12 +658,7 @@ title(ax, 'CO_2 Trapping Mass Inventory Distribution (Mt)', 'FontSize', 13, 'Fon
 ax.FontSize = 11;
 grid(ax, 'on');
 xlim(ax, [0 t_trap(end)]);
-try
-    saveas(h1, fullfile(outputDir, 'co2_trapping_inventory.png'));
-    fprintf('  -> Saved co2_trapping_inventory.png\n');
-catch
-    fprintf('  -> Warning: failed to save trapping plot\n');
-end
+% User requested: skip saving co2_trapping_inventory.png
 fprintf('Trapping inventory plot complete.\n\n');
 
 end  % ~HEADLESS
@@ -819,7 +814,14 @@ for r = 1:height(wellLoc)
 
     if ~hasAnyActive; continue; end    % no active cells in layers 6-10
 
-    entry.name       = char(wellLoc.Well_Bore_Name(r));
+    wNameRaw = char(wellLoc.Well_Bore_Name(r));
+    wNameSafe = regexprep(wNameRaw, '[/ ]', '_');
+    skip_wells = {'31/5-2 R', '31/2-5 R2', '31/2-5 R', '31_5-2_R', '31_2-5_R2', '31_2-5_R'};
+    if ismember(wNameRaw, skip_wells) || ismember(wNameSafe, skip_wells)
+        continue;   % User requested: skip generating CSV data for these wells
+    end
+
+    entry.name       = wNameRaw;
     entry.gI         = gI;
     entry.gJ         = gJ;
     entry.layers     = layersToExtract;
@@ -1008,6 +1010,92 @@ else
 end
 % ---------------------------------------------------------------------------
 
+% --- Add WFlank_test_well_1 (Western Flank Extrema at J=42, X in [5.36, 5.55]x10^5) ------
+hc5_layers = 6:10;
+hc5_layerCells = cell(length(hc5_layers), 1);
+hc5_hasActive = false;
+hc5_gI = -1;
+hc5_gJ = -1;
+
+for test_I5 = G.cartDims(1):-1:50
+    test_J5 = 42;
+    temp5_hasActive = false;
+    temp5_layerCells = cell(length(hc5_layers), 1);
+    for k_idx = 1:length(hc5_layers)
+        k = hc5_layers(k_idx);
+        wc_g5 = false(G.cartDims);
+        wc_g5(test_I5, test_J5, k) = true;
+        wc5 = find(wc_g5(G.cells.indexMap));
+        temp5_layerCells{k_idx} = wc5;
+        if ~isempty(wc5)
+            temp5_hasActive = true;
+        end
+    end
+    if temp5_hasActive
+        hc5_gI = test_I5;
+        hc5_gJ = test_J5;
+        hc5_layerCells = temp5_layerCells;
+        hc5_hasActive = true;
+        break;
+    end
+end
+
+if hc5_hasActive
+    hc5_entry.name       = 'WFlank_test_well_1';
+    hc5_entry.gI         = hc5_gI;
+    hc5_entry.gJ         = hc5_gJ;
+    hc5_entry.layers     = hc5_layers;
+    hc5_entry.layerCells = hc5_layerCells;
+    obsWells(end+1)      = hc5_entry;
+    fprintf('[WFlank_test_well_1] Found at GridI=%d, GridJ=%d\n', hc5_gI, hc5_gJ);
+else
+    fprintf('[WFlank_test_well_1] WARNING: No active cells found at J=42 western flank.\n');
+end
+% ---------------------------------------------------------------------------
+
+% --- Add WFlank_test_well_2 (Western Flank Extrema at J=65, X in [5.36, 5.55]x10^5) ------
+hc6_layers = 6:10;
+hc6_layerCells = cell(length(hc6_layers), 1);
+hc6_hasActive = false;
+hc6_gI = -1;
+hc6_gJ = -1;
+
+for test_I6 = G.cartDims(1):-1:50
+    test_J6 = 65;
+    temp6_hasActive = false;
+    temp6_layerCells = cell(length(hc6_layers), 1);
+    for k_idx = 1:length(hc6_layers)
+        k = hc6_layers(k_idx);
+        wc_g6 = false(G.cartDims);
+        wc_g6(test_I6, test_J6, k) = true;
+        wc6 = find(wc_g6(G.cells.indexMap));
+        temp6_layerCells{k_idx} = wc6;
+        if ~isempty(wc6)
+            temp6_hasActive = true;
+        end
+    end
+    if temp6_hasActive
+        hc6_gI = test_I6;
+        hc6_gJ = test_J6;
+        hc6_layerCells = temp6_layerCells;
+        hc6_hasActive = true;
+        break;
+    end
+end
+
+if hc6_hasActive
+    hc6_entry.name       = 'WFlank_test_well_2';
+    hc6_entry.gI         = hc6_gI;
+    hc6_entry.gJ         = hc6_gJ;
+    hc6_entry.layers     = hc6_layers;
+    hc6_entry.layerCells = hc6_layerCells;
+    obsWells(end+1)      = hc6_entry;
+    fprintf('[WFlank_test_well_2] Found at GridI=%d, GridJ=%d\n', hc6_gI, hc6_gJ);
+else
+    fprintf('[WFlank_test_well_2] WARNING: No active cells found at J=65 western flank.\n');
+end
+% ---------------------------------------------------------------------------
+
 fprintf('Found %d in-reservoir observation wells.\n\n', numel(obsWells));
 
 %% --- Extract and export per-well time-series CSVs ---
@@ -1020,6 +1108,10 @@ for ow = 1:numel(obsWells)
 
     % Sanitise well name for use as filename (remove / and spaces)
     safeName = regexprep(wName, '[/ ]', '_');
+    skip_wells = {'31/5-2 R', '31/2-5 R2', '31/2-5 R', '31_5-2_R', '31_2-5_R2', '31_2-5_R'};
+    if ismember(wName, skip_wells) || ismember(safeName, skip_wells)
+        continue;   % Skip requested excluded wells
+    end
 
     % Setup columns: Time_yr, (P_bar_Lx, S_CO2_Lx, Depth_m_Lx) per layer
     numCols = 1 + length(layers) * 3;
@@ -1149,6 +1241,15 @@ fclose(fid);
 %% --- Save Figures to Output Folder ---
 try
     fprintf('Saving figures to output folder ...\n');
+    allowedFigs = { ...
+        'pressure_buildup_injection_end.png', ...
+        'saturation_3d_injection_end.png', ...
+        'saturation_3d_simulation_end.png', ...
+        'saturation_xsec_injection_end.png', ...
+        'saturation_xsec_simulation_end.png', ...
+        'well_performance.png' ...
+    };
+
     figHandles = findobj('Type', 'figure');
     for f = 1:numel(figHandles)
         figObj = figHandles(f);
@@ -1167,46 +1268,32 @@ try
             end
         end
         
-        % Map title string to safe file name
+        % Map title string to safe file name (only for allowed figures)
         figName = '';
-        if contains(lower(figTitle), 'porosity')
-            figName = 'model_porosity.png';
-        elseif contains(lower(figTitle), 'lateral permeability')
-            figName = 'model_perm_lateral.png';
-        elseif contains(lower(figTitle), 'vertical permeability')
-            figName = 'model_perm_vertical.png';
-        elseif contains(lower(figTitle), 'before endpoint scaling')
-            figName = 'relperm_raw.png';
-        elseif contains(lower(figTitle), 'after endpoint scaling')
-            figName = 'relperm_scaled.png';
-        elseif contains(lower(figTitle), 'well locations')
-            figName = 'well_locations.png';
+        if contains(lower(figTitle), 'pressure buildup')
+            figName = 'pressure_buildup_injection_end.png';
         elseif contains(lower(figTitle), 'end of injection')
             figName = 'saturation_3d_injection_end.png';
         elseif contains(lower(figTitle), 'end of simulation')
             figName = 'saturation_3d_simulation_end.png';
-        elseif contains(lower(figTitle), 'pressure buildup')
-            figName = 'pressure_buildup_injection_end.png';
         elseif contains(lower(figTitle), 'vertical x-section') && contains(lower(figTitle), sprintf('year %.0f', tYears(injEndStep)))
             figName = 'saturation_xsec_injection_end.png';
         elseif contains(lower(figTitle), 'vertical x-section') && contains(lower(figTitle), sprintf('year %.0f', tYears(end)))
             figName = 'saturation_xsec_simulation_end.png';
-        elseif contains(lower(figTitle), 'trapping mass inventory')
-            figName = 'co2_trapping_inventory.png';
+        elseif contains(lower(figTitle), 'brine production rate') || contains(lower(figTitle), 'bottom-hole pressures') || contains(lower(figTitle), 'cumulative co_2')
+            figName = 'well_performance.png';
         end
         
-        % Fallback for well performance figure (which has multiple subplots, no main title)
+        % Fallback for well performance figure (multi-subplot)
         if isempty(figName) && figObj.Number == 13
             figName = 'well_performance.png';
         end
         
-        % If we still haven't named it, use default name with figure number
-        if isempty(figName)
-            figName = sprintf('figure_%d.png', figObj.Number);
+        % Save ONLY if figName is in the 6 requested figures!
+        if ~isempty(figName) && ismember(figName, allowedFigs)
+            saveas(figObj, fullfile(outputDir, figName));
+            fprintf('  Saved Figure %d -> %s\n', figObj.Number, figName);
         end
-        
-        saveas(figObj, fullfile(outputDir, figName));
-        fprintf('  Saved Figure %d -> %s\n', figObj.Number, figName);
     end
 catch figErr
     fprintf('Warning: Could not save figures: %s\n', figErr.message);
