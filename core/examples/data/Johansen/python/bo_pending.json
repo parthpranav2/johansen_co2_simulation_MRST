@@ -1,0 +1,10 @@
+{
+  "Q_deep": 0.45,
+  "T_start_deep": 18,
+  "T_end_deep": 132,
+  "Q_central": 2.2,
+  "T_start_cen": 0,
+  "T_end_cen": 195,
+  "trial": 1,
+  "written_at": "2026-07-31 22:59:07"
+}
