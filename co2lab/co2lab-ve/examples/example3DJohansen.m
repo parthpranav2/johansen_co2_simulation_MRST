@@ -1,4 +1,4 @@
- %% 3D, two-phase Johansen CO2 Storage Simulation  ― CSV-Driven Version
+%% 3D, two-phase Johansen CO2 Storage Simulation  ― CSV-Driven Version
 % Physically accurate CCS capacity assessment for the Johansen aquifer.
 % Uses real CO2 equation-of-state fluid properties, Corey relative
 
@@ -755,186 +755,55 @@ for r = 1:height(wellLoc)
     obsWells(end+1)  = entry; %#ok<AGROW>
 end
 
-% --- Add Hardcoded Observation Well (Western Extrema on line with 31/05/07 and 31/4-3) ---
-hc_layers = 6:10;
-hc_layerCells = cell(length(hc_layers), 1);
-hc_hasActive = false;
-hc_gI = -1;
-hc_gJ = -1;
-
-for test_I = 1:51
-    test_J = round(51 - (test_I - 51) / 22);
-    
-    temp_hasActive = false;
-    temp_layerCells = cell(length(hc_layers), 1);
-    
-    for k_idx = 1:length(hc_layers)
-        k = hc_layers(k_idx);
-        wc_g = false(G.cartDims);
-        wc_g(test_I, test_J, k) = true;
-        wc = find(wc_g(G.cells.indexMap));
-        temp_layerCells{k_idx} = wc;
-        if ~isempty(wc)
-            temp_hasActive = true;
-        end
-    end
-    
-    if temp_hasActive
-        % Found the absolute furthest active grid block on this flange
-        hc_gI = test_I;
-        hc_gJ = test_J;
-        hc_layerCells = temp_layerCells;
-        hc_hasActive = true;
-        break; 
-    end
-end
-
-if hc_hasActive
-    hc_entry.name       = 'SBoundary_test_well';
-    hc_entry.gI         = hc_gI;
-    hc_entry.gJ         = hc_gJ;
-    hc_entry.layers     = hc_layers;
-    hc_entry.layerCells = hc_layerCells;
-    obsWells(end+1)     = hc_entry;
-end
-% ---------------------------------------------------------------------------
-
-% --- Add SBoundary_test_well_2 (Western Extrema inline with 31/07/01) ------
-% 31/07/01 sits at GridI=25, GridJ=32. The furthest active block
-hc2_layers = 6:10;
-hc2_layerCells = cell(length(hc2_layers), 1);
-hc2_hasActive = false;
-hc2_gI = -1;
-hc2_gJ = -1;
-
-for test_I2 = 1:30   % scan from western edge toward 31/07/01 (I=25)
-    test_J2 = 32;    % fixed J-flange inline with 31/07/01
-    
-    temp2_hasActive = false;
-    temp2_layerCells = cell(length(hc2_layers), 1);
-    
-    for k_idx = 1:length(hc2_layers)
-        k = hc2_layers(k_idx);
-        wc_g2 = false(G.cartDims);
-        wc_g2(test_I2, test_J2, k) = true;
-        wc2 = find(wc_g2(G.cells.indexMap));
-        temp2_layerCells{k_idx} = wc2;
-        if ~isempty(wc2)
-            temp2_hasActive = true;
-        end
-    end
-    
-    if temp2_hasActive
-        hc2_gI = test_I2;
-        hc2_gJ = test_J2;
-        hc2_layerCells = temp2_layerCells;
-        hc2_hasActive = true;
-        break;   % stop at the first (westernmost) active block
-    end
-end
-
-if hc2_hasActive
-    hc2_entry.name       = 'SBoundary_test_well_2';
-    hc2_entry.gI         = hc2_gI;
-    hc2_entry.gJ         = hc2_gJ;
-    hc2_entry.layers     = hc2_layers;
-    hc2_entry.layerCells = hc2_layerCells;
-    obsWells(end+1)      = hc2_entry;
-    fprintf('[SBoundary_test_well_2] Found at GridI=%d, GridJ=%d\n', hc2_gI, hc2_gJ);
-else
-    fprintf('[SBoundary_test_well_2] WARNING: No active cells found at J=32 western edge.\n');
-end
-% ---------------------------------------------------------------------------
-
-% --- Add SBoundary_test_well_3 (Equispaced, above SBoundary_test_well) ------
-% SBoundary_test_well is at ~J=53. Spacing is ~21 cells. So J=74.
-hc3_layers = 6:10;
-hc3_layerCells = cell(length(hc3_layers), 1);
-hc3_hasActive = false;
-hc3_gI = -1;
-hc3_gJ = -1;
-
-for test_I3 = 1:50
-    test_J3 = 74;
-    temp3_hasActive = false;
-    temp3_layerCells = cell(length(hc3_layers), 1);
-    for k_idx = 1:length(hc3_layers)
-        k = hc3_layers(k_idx);
-        wc_g3 = false(G.cartDims);
-        wc_g3(test_I3, test_J3, k) = true;
-        wc3 = find(wc_g3(G.cells.indexMap));
-        temp3_layerCells{k_idx} = wc3;
-        if ~isempty(wc3)
-            temp3_hasActive = true;
-        end
-    end
-    if temp3_hasActive
-        hc3_gI = test_I3;
-        hc3_gJ = test_J3;
-        hc3_layerCells = temp3_layerCells;
-        hc3_hasActive = true;
-        break;
-    end
-end
-
-if hc3_hasActive
-    hc3_entry.name       = 'SBoundary_test_well_3';
-    hc3_entry.gI         = hc3_gI;
-    hc3_entry.gJ         = hc3_gJ;
-    hc3_entry.layers     = hc3_layers;
-    hc3_entry.layerCells = hc3_layerCells;
-    obsWells(end+1)      = hc3_entry;
-    fprintf('[SBoundary_test_well_3] Found at GridI=%d, GridJ=%d\n', hc3_gI, hc3_gJ);
-else
-    fprintf('[SBoundary_test_well_3] WARNING: No active cells found at J=74 western edge.\n');
-end
-% ---------------------------------------------------------------------------
-
-% --- Add SBoundary_test_well_4 (Equispaced, above SBoundary_test_well_3) ------
-% J = 74 + 21 = 95
-hc4_layers = 6:10;
-hc4_layerCells = cell(length(hc4_layers), 1);
-hc4_hasActive = false;
-hc4_gI = -1;
-hc4_gJ = -1;
-
-for test_I4 = 1:50
-    test_J4 = 95;
-    temp4_hasActive = false;
-    temp4_layerCells = cell(length(hc4_layers), 1);
-    for k_idx = 1:length(hc4_layers)
-        k = hc4_layers(k_idx);
-        wc_g4 = false(G.cartDims);
-        wc_g4(test_I4, test_J4, k) = true;
-        wc4 = find(wc_g4(G.cells.indexMap));
-        temp4_layerCells{k_idx} = wc4;
-        if ~isempty(wc4)
-            temp4_hasActive = true;
-        end
-    end
-    if temp4_hasActive
-        hc4_gI = test_I4;
-        hc4_gJ = test_J4;
-        hc4_layerCells = temp4_layerCells;
-        hc4_hasActive = true;
-        break;
-    end
-end
-
-if hc4_hasActive
-    hc4_entry.name       = 'SBoundary_test_well_4';
-    hc4_entry.gI         = hc4_gI;
-    hc4_entry.gJ         = hc4_gJ;
-    hc4_entry.layers     = hc4_layers;
-    hc4_entry.layerCells = hc4_layerCells;
-    obsWells(end+1)      = hc4_entry;
-    fprintf('[SBoundary_test_well_4] Found at GridI=%d, GridJ=%d\n', hc4_gI, hc4_gJ);
-else
-    fprintf('[SBoundary_test_well_4] WARNING: No active cells found at J=95 western edge.\n');
-end
-% ---------------------------------------------------------------------------
-
 fprintf('Found %d in-reservoir observation wells.\n\n', numel(obsWells));
+
+%% =========================================================================
+% SECTION G: FULL-BOUNDARY CO2 BREACH SCAN
+% Replaces the previous 4 hardcoded point-sample "surveillance wells"
+fprintf('Scanning full western boundary for CO2 breach (topmost layer)...\n');
+
+TOP_LAYER        = 6;     % shallowest layer of the old 6:10 perforation range
+S_CO2_BREACH_THR = 0.15;  % 15% saturation threshold
+
+nJgrid = G.cartDims(2);
+boundary_gI     = [];
+boundary_gJ     = [];
+boundary_cellId = [];
+
+for gJ = 1:nJgrid
+    for gI = 1:G.cartDims(1)
+        wc_g = false(G.cartDims);
+        wc_g(gI, gJ, TOP_LAYER) = true;
+        wc = find(wc_g(G.cells.indexMap));
+        if ~isempty(wc)
+            boundary_gI(end+1)     = gI;    %#ok<SAGROW>
+            boundary_gJ(end+1)     = gJ;    %#ok<SAGROW>
+            boundary_cellId(end+1) = wc(1); %#ok<SAGROW>
+            break;   % stop at the first (westernmost) active cell for this J-row
+        end
+    end
+end
+
+nBoundaryCells = numel(boundary_cellId);
+fprintf('  Found %d boundary cells across %d J-rows (topmost layer = %d)\n', ...
+        nBoundaryCells, nJgrid, TOP_LAYER);
+
+if nBoundaryCells > 0
+    sCO2_end   = states{end}.s(boundary_cellId, 2);
+    breachFlag = double(sCO2_end > S_CO2_BREACH_THR);
+else
+    breachFlag = [];
+end
+
+boundaryT = table(boundary_gI(:), boundary_gJ(:), breachFlag(:), ...
+                   'VariableNames', {'cell_x', 'cell_y', 'breach'});
+boundaryCsvPath = fullfile(outputDir, 'boundary_breach.csv');
+writetable(boundaryT, boundaryCsvPath);
+
+nBoundaryBreached = sum(breachFlag);
+fprintf('  Breached cells: %d / %d (%.1f%%)\n', nBoundaryBreached, nBoundaryCells, ...
+        100 * nBoundaryBreached / max(nBoundaryCells,1));
+fprintf('  -> %s\n\n', boundaryCsvPath);
 
 %% --- Extract and export per-well time-series CSVs ---
 nSteps = numel(states);
@@ -1046,6 +915,13 @@ if ~isempty(injIdx)
         end
     end
 end
+fprintf(fid, '\n--- BOUNDARY CO2 BREACH SCAN (Condition 2 — full-boundary scan) ---\n');
+fprintf(fid, 'Topmost perforated layer scanned : %d\n', TOP_LAYER);
+fprintf(fid, 'S_CO2 breach threshold           : %.0f%%\n', S_CO2_BREACH_THR * 100);
+fprintf(fid, 'Boundary cells scanned           : %d (one per J-row, westernmost active cell)\n', nBoundaryCells);
+fprintf(fid, 'Cells breached                   : %d (%.1f%%)\n', nBoundaryBreached, ...
+        100 * nBoundaryBreached / max(nBoundaryCells,1));
+fprintf(fid, 'CSV file                         : boundary_breach.csv\n');
 fprintf(fid, '\n--- OBSERVATION WELLS IN RESERVOIR (all wells with active cells) ---\n');
 fprintf(fid, '%-25s  %6s  %6s  %6s  %6s  %12s  %20s\n', ...
         'Well', 'GridI', 'GridJ', 'LayFr', 'LayTo', 'Depth_m', 'CSV_file');
@@ -1072,6 +948,10 @@ fprintf(fid, 'Depth_m_L<k>     : Mean depth of active cells in layer k [m below 
 fprintf(fid, '\nNOTE: Pressure and saturation are per-layer spatial means over all active\n');
 fprintf(fid, 'cells at that well location. For plan wells (injectors\n');
 fprintf(fid, 'and producers), the wellSol BHP is the true wellbore pressure.\n');
+fprintf(fid, '\nNOTE: boundary_breach.csv (cell_x, cell_y, breach) covers the FULL western\n');
+fprintf(fid, 'boundary of the reservoir footprint at layer %d, checked at simulation end\n', TOP_LAYER);
+fprintf(fid, 'against the %.0f%% S_CO2 threshold -- this is the authoritative source for\n', S_CO2_BREACH_THR*100);
+fprintf(fid, 'Condition 2 (CO2 plume boundary breach), not the per-well CSVs above.\n');
 fprintf(fid, '==========================================================\n');
 
 fclose(fid);
