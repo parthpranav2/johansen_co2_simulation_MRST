@@ -16,6 +16,8 @@ if HEADLESS
 else
     close all;   % Clear previous plot windows to prevent numbering conflicts
     if SAVE_ONLY
+        % Keep figures completely invisible (no flickering) — they are only created
+        % for saving, not display. Do NOT reset DefaultFigureVisible at the end.
         set(0, 'DefaultFigureVisible', 'off');
     else
         set(0, 'DefaultFigureVisible', 'on');
@@ -1076,13 +1078,8 @@ else
     fprintf('[BO Signal] WARNING: Could not write signal file.\n');
 end
 
-% Cleanup if SAVE_ONLY is active
-if exist('SAVE_ONLY', 'var') && SAVE_ONLY && ~HEADLESS
-    close all;
-    set(0, 'DefaultFigureVisible', 'on');
-end
-
 % Alert the user that the simulation is complete
+% (Figures remain invisible in memory; not displayed to user)
 beep; pause(0.5); beep;
 
 
