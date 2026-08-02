@@ -468,6 +468,7 @@ title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Injection)', ...
       tYears(injEndStep)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
 
+
 end  % ~HEADLESS
 %% =========================================================================
 %  Figure 8: CO2 saturation 3D at simulation end
@@ -479,6 +480,7 @@ set(gcf,'position',[531 337 923 356]); axis tight;
 title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Simulation)', ...
       tYears(end)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
+
 
 end  % ~HEADLESS
 %% =========================================================================
@@ -493,6 +495,7 @@ set(gcf,'position',[531 337 923 356]); axis tight;
 title(sprintf('Pressure Buildup \\DeltaP at Year %.0f (bar)', ...
       tYears(injEndStep)), 'FontSize',13);
 c = colorbar; c.Label.String = '\DeltaP (bar)';
+
 
 end  % ~HEADLESS
 %% =========================================================================
@@ -1126,6 +1129,43 @@ try
         
         % Save ONLY if figName is in the 6 requested figures!
         if ~isempty(figName) && ismember(figName, allowedFigs)
+            % Add well markers for 3D plots
+            if contains(figName, 'saturation_3d') || contains(figName, 'pressure_buildup')
+                figure(figObj);
+                hold on;
+                h_inj = []; h_obs = [];
+                injNames = {};
+                % 1. Plot injectors from W
+                for w_idx = 1:numel(W)
+                    if strcmp(W(w_idx).type, 'rate')
+                        injNames{end+1} = W(w_idx).name;
+                        wc = W(w_idx).cells(1);
+                        xw = G.cells.centroids(wc,1); yw = G.cells.centroids(wc,2); zw = G.cells.centroids(wc,3) - 100;
+                        h1 = plot3(xw, yw, zw, 'kv', 'MarkerFaceColor', 'r', 'MarkerSize', 8);
+                        if isempty(h_inj), h_inj = h1; end
+                    end
+                end
+                % 2. Plot surveillance from obsWells
+                for ow = 1:numel(obsWells)
+                    % Skip injectors (they are already plotted as red triangles)
+                    if ismember(obsWells(ow).name, injNames)
+                        continue;
+                    end
+                    % obsWells is defined after W but before this save loop
+                    allCells = vertcat(obsWells(ow).layerCells{:});
+                    if ~isempty(allCells)
+                        wc = allCells(1);
+                        xw = G.cells.centroids(wc,1); yw = G.cells.centroids(wc,2); zw = G.cells.centroids(wc,3) - 100;
+                        h2 = plot3(xw, yw, zw, 'ko', 'MarkerFaceColor', 'b', 'MarkerSize', 8);
+                        if isempty(h_obs), h_obs = h2; end
+                    end
+                end
+                leg_h = []; leg_str = {};
+                if ~isempty(h_inj), leg_h(end+1) = h_inj; leg_str{end+1} = 'Injector'; end
+                if ~isempty(h_obs), leg_h(end+1) = h_obs; leg_str{end+1} = 'Surveillance'; end
+                if ~isempty(leg_h), legend(leg_h, leg_str, 'Location', 'northeast'); end
+            end
+            
             saveas(figObj, fullfile(outputDir, figName));
             fprintf('  Saved Figure %d -> %s\n', figObj.Number, figName);
         end
