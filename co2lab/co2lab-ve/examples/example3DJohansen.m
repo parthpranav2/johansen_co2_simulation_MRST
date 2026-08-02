@@ -6,22 +6,19 @@
 %  Load modules
 % =========================================================================
 
-%% --- Headless detection ---------------------------------------------------
-% When launched by the Bayesian optimizer (-batch mode), there is no display.
-% Set HEADLESS=true to skip all figure() calls and saveas() silently.
-HEADLESS = ~usejava('desktop');
-SAVE_ONLY = true; % Change to false to see figures on screen
-if HEADLESS
-    fprintf('[HEADLESS MODE] Running without display — all plots suppressed.\n');
+%% --- Figure Display Control ------------------------------------------------
+% DISPLAY_FIGURES: Set to FALSE (default) to suppress ALL figure windows.
+% Figures are STILL created in memory and SAVED to disk; only the on-screen
+DISPLAY_FIGURES = false;   % <-- TOGGLE HERE: true = show figs, false = silent mode
+
+% Suppress all figure display when DISPLAY_FIGURES is false
+if ~DISPLAY_FIGURES
+    set(0, 'DefaultFigureVisible', 'off');
+    fprintf('[SILENT MODE] Running without figure display — plots saved to disk only.\n');
 else
-    close all;   % Clear previous plot windows to prevent numbering conflicts
-    if SAVE_ONLY
-        % Keep figures completely invisible (no flickering) — they are only created
-        % for saving, not display. Do NOT reset DefaultFigureVisible at the end.
-        set(0, 'DefaultFigureVisible', 'off');
-    else
-        set(0, 'DefaultFigureVisible', 'on');
-    end
+    close all;
+    set(0, 'DefaultFigureVisible', 'on');
+    fprintf('[INTERACTIVE MODE] Figure windows will be displayed.\n');
 end
 
 %% --- Create output folder for this run ---
@@ -39,7 +36,7 @@ mrstModule add coarsegrid
 % =========================================================================
 [G, rock, bcIx] = makeJohansenVEgrid();
 
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure; plotCellData(G, rock.poro); view(-35,15); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
 title('Porosity','FontSize',12);
@@ -87,7 +84,7 @@ fluid = initSimpleADIFluid('phases', 'WG'             , ...
 
 % Rel-perm before endpoint scaling
 sw = linspace(0, 1, 200);
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure; hold on;
 plot(sw, fluid.krW(sw),   'b', 'LineWidth', 1.5);
 plot(sw, fluid.krG(1-sw), 'r', 'LineWidth', 1.5);
@@ -285,7 +282,7 @@ fprintf('\nSummary: %d active wells  (%d injectors, %d producers)\n\n', ...
 %% =========================================================================
 %  SECTION E: Well location map
 % =========================================================================
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure('Color','w');
 plotGrid(G, 'facecolor','none','edgealpha',0.1);
 hold on;
@@ -462,7 +459,7 @@ fprintf('Simulation end year          : %.1f yr\n\n', tYears(end));
 %% =========================================================================
 %  Figure 7: CO2 saturation 3D at injection end
 % =========================================================================
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, states{injEndStep}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -475,7 +472,7 @@ end  % ~HEADLESS
 %% =========================================================================
 %  Figure 8: CO2 saturation 3D at simulation end
 % =========================================================================
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, states{end}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -490,7 +487,7 @@ end  % ~HEADLESS
 %  Shows where producers are drawing down pressure
 % =========================================================================
 deltaP = (states{injEndStep}.pressure - initState.pressure) / barsa;
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, deltaP); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -506,7 +503,7 @@ end  % ~HEADLESS
 [ic, jc, ~] = ind2sub(G.cartDims, G.cells.indexMap);
 xsecMask = jc==48 & ic>18 & ic<75;
 
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(extractSubgrid(G, xsecMask), ...
              states{injEndStep}.s(xsecMask, 2));
@@ -571,7 +568,7 @@ mass_injected_cum = cumsum(mass_injected);
 mass_exited = max(mass_injected_cum - mass_free - mass_residual, 0);
 
 % --- Plot
-if ~HEADLESS
+if DISPLAY_FIGURES
 h1 = figure('Color','w');
 ax  = axes(h1);
 
@@ -637,7 +634,7 @@ dtYr         = schedule.step.val / year;
 co2Total     = cumsum(co2MtYr   .* dtYr);
 brineTotal   = cumsum(brineMtYr .* dtYr);
 
-if ~HEADLESS
+if DISPLAY_FIGURES
 figure('Color','w','Position',[50 50 1400 550]);
 
 % --- Subplot 1: Rates ---
@@ -1079,7 +1076,6 @@ else
 end
 
 % Alert the user that the simulation is complete
-% (Figures remain invisible in memory; not displayed to user)
 beep; pause(0.5); beep;
 
 
