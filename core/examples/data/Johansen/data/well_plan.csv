@@ -1,14 +1,14 @@
 Well_Bore_Name,Role,Rate_MtPerYear,BHP_bar,Start_Year,End_Year,Perf_From,Perf_To,Notes
-31/01/01,Injector,2.3,-1,33,74,6,6,ACTIVE: Deep well — directional (+I / leftward) injector for extended trapping path
+31/01/01,Injector,2.4,-1,75,81,6,6,ACTIVE: Deep well — directional (+I / leftward) injector for extended trapping path
 31/11-1 S,Injector,0.0,-1,9999,9999,6,8,DISABLED: out of grid bounds
-31/1-3 S,Injector,0.35,-1,93,100,6,6,ACTIVE: Deep well — directional (+I / leftward) injector for extended trapping path
+31/1-3 S,Injector,1.3,-1,51,66,6,6,ACTIVE: Deep well — directional (+I / leftward) injector for extended trapping path
 31/2-1,Injector,0.0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/2-1 R,Injector,0.0,-1,9999,9999,6,8,DISABLED: duplicate location
 31/2-2 R,Injector,0.0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/2-3,Injector,0.0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/2-4 R,Injector,0.0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/2-4 R2,Injector,0.0,-1,9999,9999,6,8,DISABLED: duplicate location
-31/2-5,Injector,3.5,-1,51,69,6,6,ACTIVE: Deep well — directional (+I / leftward) injector for extended trapping path
+31/2-5,Injector,0.15,-1,11,16,6,6,ACTIVE: Deep well — directional (+I / leftward) injector for extended trapping path
 31/2-5 R,Injector,0.0,-1,9999,9999,6,8,DISABLED: duplicate location
 31/2-5 R2,Injector,0.0,-1,9999,9999,6,8,DISABLED: duplicate location
 31/2-8,Injector,0.0,-1,9999,9999,6,8,DISABLED: at grid edge - may lack active cells
@@ -17,12 +17,12 @@ Well_Bore_Name,Role,Rate_MtPerYear,BHP_bar,Start_Year,End_Year,Perf_From,Perf_To
 31/4-3,Injector,1.25,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
 31/05/02,Injector,0.0,-1,9999,9999,6,6,DISABLED: removed from BO v4 individual wells optimization
 31/5-2 R,Injector,0.0,-1,9999,9999,6,8,DISABLED: same cell as 31/05/07
-31/05/07,Injector,4.1,-1,65,75,10,10,ACTIVE: Central injector - delayed start after 5yr pre-production
+31/05/07,Injector,0.25,-1,57,95,10,10,ACTIVE: Central injector - delayed start after 5yr pre-production
 31/6-1,Injector,0.0,-1,9999,9999,6,8,ACTIVE: SE flank producer for symmetric pressure drainage
 31/6-2 R,Injector,0.0,-1,9999,9999,6,8,DISABLED: likely outside active formation cells
 31/6-3,Injector,0.0,-1,9999,9999,6,8,DISABLED: likely outside active formation cells
 31/6-6,Injector,0.0,-1,9999,9999,6,8,DISABLED: not selected for 3-well plan
-31/07/01,Injector,4.6,-1,78,100,6,8,ACTIVE: Added for BO v4 individual wells optimization
+31/07/01,Injector,4.45,-1,29,69,6,8,ACTIVE: Added for BO v4 individual wells optimization
 32/4-1,Injector,0.0,-1,9999,9999,6,8,DISABLED: likely outside active formation cells
 32/4-3 S,Injector,0.0,-1,9999,9999,6,8,DISABLED: likely outside active formation cells
 35/10-1,Injector,0.0,-1,9999,9999,6,8,DISABLED: out of grid bounds
