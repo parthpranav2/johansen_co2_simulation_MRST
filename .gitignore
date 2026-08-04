@@ -10,8 +10,9 @@
 !core/examples/data/Johansen/python/*.json
 !core/examples/data/Johansen/data/*.csv
 !co2lab/co2lab-ve/examples/example3DJohansen.m
+!co2lab/co2lab-ve/examples/run_batch_simulations.m
 !.gitignore
-!README.md
+README.md
 
 # Explicitly ignore data, models, and images even in allowed directories
 
