@@ -91,6 +91,7 @@ plot(sw, fluid.krG(1-sw), 'r', 'LineWidth', 1.5);
 xlabel('Brine saturation'); ylabel('Relative permeability');
 title('Rel-perm curves (before endpoint scaling)','FontSize',12);
 set(gca,'FontSize',12); legend('krW','krG');
+end
 
 % Endpoint scaling: residual saturations
 srw = 0.27;   % residual brine saturation
@@ -98,6 +99,7 @@ src = 0.20;   % residual CO2 saturation
 fluid.krW = @(s) fluid.krW(max((s - srw)./(1 - srw), 0));
 fluid.krG = @(s) fluid.krG(max((s - src)./(1 - src), 0));
 
+if DISPLAY_FIGURES
 % Rel-perm after endpoint scaling
 figure; hold on;
 sw2 = linspace(srw, 1, 200);
@@ -107,13 +109,12 @@ line([srw, srw], [0 1], 'color', 'k', 'linestyle', ':', 'LineWidth', 1);
 xlabel('Brine saturation'); ylabel('Relative permeability');
 title(sprintf('Rel-perm after endpoint scaling  (srw=%.2f, src=%.2f)', srw, src),'FontSize',12);
 set(gca,'FontSize',12,'xlim',[0 1]); legend('krW','krG');
+end
 
 % Capillary pressure
 pe   = 5 * kilo * Pascal;
 pcWG = @(sw_) pe * sw_.^(-1/2);
 fluid.pcWG = @(sg) pcWG(max((1 - sg - srw)./(1 - srw), 1e-5));
-
-end  % ~HEADLESS
 %% =========================================================================
 %  SECTION A: Configuration
 % =========================================================================
@@ -1075,8 +1076,6 @@ else
     fprintf('[BO Signal] WARNING: Could not write signal file.\n');
 end
 
-% Alert the user that the simulation is complete
-beep; pause(0.5); beep;
 
 
 %%
