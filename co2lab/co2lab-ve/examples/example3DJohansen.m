@@ -1,4 +1,10 @@
-%% 3D, two-phase Johansen CO2 Storage Simulation  ― CSV-Driven Version
+%% 3D, two-phase Johansen CO2 Storage Simulation  ― CSV-Driven Version  [v6]
+%
+%  v6 CHANGES (from v5):
+%    - 31/2-5 removed from dirInjNames (retired: peaked 400-550 bar BHP,
+%      consistently 50-60% over 324 bar limit across 120 trials)
+%    ⚠️  Also disable 31/2-5 in well_plan_BACKUP_BO.csv:
+%        set Start_Year=9999, End_Year=9999
 %
 %  PURPOSE
 %  -------
@@ -128,7 +134,6 @@ plot(sw, fluid.krG(1-sw), 'r', 'LineWidth', 1.5);
 xlabel('Brine saturation'); ylabel('Relative permeability');
 title('Rel-perm curves (before endpoint scaling)','FontSize',12);
 set(gca,'FontSize',12); legend('krW','krG');
-end
 
 % Endpoint scaling: residual saturations
 srw = 0.27;   % residual brine saturation
@@ -136,7 +141,6 @@ src = 0.20;   % residual CO2 saturation
 fluid.krW = @(s) fluid.krW(max((s - srw)./(1 - srw), 0));
 fluid.krG = @(s) fluid.krG(max((s - src)./(1 - src), 0));
 
-if DISPLAY_FIGURES
 % Rel-perm after endpoint scaling
 figure; hold on;
 sw2 = linspace(srw, 1, 200);
@@ -146,12 +150,13 @@ line([srw, srw], [0 1], 'color', 'k', 'linestyle', ':', 'LineWidth', 1);
 xlabel('Brine saturation'); ylabel('Relative permeability');
 title(sprintf('Rel-perm after endpoint scaling  (srw=%.2f, src=%.2f)', srw, src),'FontSize',12);
 set(gca,'FontSize',12,'xlim',[0 1]); legend('krW','krG');
-end
 
 % Capillary pressure
 pe   = 5 * kilo * Pascal;
 pcWG = @(sw_) pe * sw_.^(-1/2);
 fluid.pcWG = @(sg) pcWG(max((1 - sg - srw)./(1 - srw), 1e-5));
+
+end  % ~HEADLESS
 %% =========================================================================
 %  SECTION A: Configuration
 % =========================================================================
@@ -433,7 +438,7 @@ model = TwoPhaseWaterGasModel(G, rock, fluid, 0, 0);
 %  in the +I direction.  This is the standard MRST approach and leaves
 %  the rest of the domain completely unmodified.
 % =========================================================================
-dirInjNames = {'31/01/01','31/1-3 S','31/2-5','31/05/02'};
+dirInjNames = {'31/01/01','31/1-3 S','31/05/02'};   % 31/2-5 retired (v6) — persistent BHP breach 400-550 bar
 BLOCK_FACTOR = 1e-12;   % near-zero mult for blocked faces
 
 for di = 1:numel(dirInjNames)
@@ -522,6 +527,7 @@ fprintf('Simulation end year          : %.1f yr\n\n', tYears(end));
 %% =========================================================================
 %  Figure 7: CO2 saturation 3D at injection end
 % =========================================================================
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, states{injEndStep}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -530,9 +536,11 @@ title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Injection)', ...
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
 
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 8: CO2 saturation 3D at simulation end
 % =========================================================================
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, states{end}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -541,11 +549,13 @@ title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Simulation)', ...
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
 
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 9: Pressure buildup deltaP at injection end
 %  Shows where producers are drawing down pressure
 % =========================================================================
 deltaP = (states{injEndStep}.pressure - initState.pressure) / barsa;
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, deltaP); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
@@ -554,12 +564,14 @@ title(sprintf('Pressure Buildup \\DeltaP at Year %.0f (bar)', ...
 c = colorbar; c.Label.String = '\DeltaP (bar)';
 
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figures 10-11: Vertical cross-sections through grid j=48
 % =========================================================================
 [ic, jc, ~] = ind2sub(G.cartDims, G.cells.indexMap);
 xsecMask = jc==48 & ic>18 & ic<75;
 
+if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(extractSubgrid(G, xsecMask), ...
              states{injEndStep}.s(xsecMask, 2));
@@ -576,6 +588,7 @@ title(sprintf('Vertical X-Section CO_2 Saturation at Year %.0f (j=48)', ...
       tYears(end)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation';
 
+end  % ~HEADLESS
 %% =========================================================================
 %  Figure 12: CO2 trapping inventory — manual calculation
 %
@@ -698,6 +711,7 @@ dtYr         = schedule.step.val / year;
 co2Total     = cumsum(co2MtYr   .* dtYr);
 brineTotal   = cumsum(brineMtYr .* dtYr);
 
+if DISPLAY_FIGURES
 figure('Color','w','Position',[50 50 1400 550]);
 
 % --- Subplot 1: Rates ---
@@ -738,6 +752,8 @@ subplot(1,3,3);
     title('Well Bottom-Hole Pressures','FontSize',12);
     legend(wellNames,'Location','northeast','FontSize',8);
     grid on; set(gca,'FontSize',11);
+
+end  % ~HEADLESS
 %% =========================================================================
 %  Console summary
 % =========================================================================
@@ -1102,7 +1118,7 @@ try
         if ~isempty(figName) && ismember(figName, allowedFigs)
             % Add well markers for 3D plots
             if contains(figName, 'saturation_3d') || contains(figName, 'pressure_buildup')
-                set(0, 'CurrentFigure', figObj);
+                figure(figObj);
                 hold on;
                 h_inj = []; h_obs = [];
                 injNames = {};
@@ -1167,10 +1183,6 @@ if fid ~= -1
     fprintf('[BO Signal] Written -> %s\n', boSignalPath);
 else
     fprintf('[BO Signal] WARNING: Could not write signal file.\n');
-end
-
-if ~DISPLAY_FIGURES
-    close all; % clean up invisibly stored figures to prevent memory leaks
 end
 
 % Alert the user that the simulation is complete
