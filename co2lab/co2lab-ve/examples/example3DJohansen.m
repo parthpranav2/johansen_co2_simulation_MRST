@@ -36,7 +36,6 @@ mrstModule add coarsegrid
 % =========================================================================
 [G, rock, bcIx] = makeJohansenVEgrid();
 
-if DISPLAY_FIGURES
 figure; plotCellData(G, rock.poro); view(-35,15); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
 title('Porosity','FontSize',12);
@@ -48,8 +47,6 @@ set(gca,'fontsize',24); title('Lateral Permeability (mD)','FontSize',12);
 figure; plotCellData(G, rock.perm(:,3)/darcy); view(-55,60); colorbar;
 set(gcf,'position',[152 419 1846 700],'color','white'); axis tight;
 set(gca,'fontsize',24); title('Vertical Permeability (mD)','FontSize',12);
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Initial state
 % =========================================================================
@@ -84,14 +81,12 @@ fluid = initSimpleADIFluid('phases', 'WG'             , ...
 
 % Rel-perm before endpoint scaling
 sw = linspace(0, 1, 200);
-if DISPLAY_FIGURES
 figure; hold on;
 plot(sw, fluid.krW(sw),   'b', 'LineWidth', 1.5);
 plot(sw, fluid.krG(1-sw), 'r', 'LineWidth', 1.5);
 xlabel('Brine saturation'); ylabel('Relative permeability');
 title('Rel-perm curves (before endpoint scaling)','FontSize',12);
 set(gca,'FontSize',12); legend('krW','krG');
-end
 
 % Endpoint scaling: residual saturations
 srw = 0.27;   % residual brine saturation
@@ -99,7 +94,6 @@ src = 0.20;   % residual CO2 saturation
 fluid.krW = @(s) fluid.krW(max((s - srw)./(1 - srw), 0));
 fluid.krG = @(s) fluid.krG(max((s - src)./(1 - src), 0));
 
-if DISPLAY_FIGURES
 % Rel-perm after endpoint scaling
 figure; hold on;
 sw2 = linspace(srw, 1, 200);
@@ -109,7 +103,6 @@ line([srw, srw], [0 1], 'color', 'k', 'linestyle', ':', 'LineWidth', 1);
 xlabel('Brine saturation'); ylabel('Relative permeability');
 title(sprintf('Rel-perm after endpoint scaling  (srw=%.2f, src=%.2f)', srw, src),'FontSize',12);
 set(gca,'FontSize',12,'xlim',[0 1]); legend('krW','krG');
-end
 
 % Capillary pressure
 pe   = 5 * kilo * Pascal;
@@ -283,7 +276,6 @@ fprintf('\nSummary: %d active wells  (%d injectors, %d producers)\n\n', ...
 %% =========================================================================
 %  SECTION E: Well location map
 % =========================================================================
-if DISPLAY_FIGURES
 figure('Color','w');
 plotGrid(G, 'facecolor','none','edgealpha',0.1);
 hold on;
@@ -296,8 +288,6 @@ for w = 1:nWells
 end
 view(3); axis tight;
 title('Well Locations: CO_2 Injectors (red) | Brine Producers (blue)','FontSize',13);
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Boundary conditions  (unchanged from original)
 % =========================================================================
@@ -460,51 +450,38 @@ fprintf('Simulation end year          : %.1f yr\n\n', tYears(end));
 %% =========================================================================
 %  Figure 7: CO2 saturation 3D at injection end
 % =========================================================================
-if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, states{injEndStep}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
 title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Injection)', ...
       tYears(injEndStep)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
-
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Figure 8: CO2 saturation 3D at simulation end
 % =========================================================================
-if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, states{end}.s(:,2)); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
 title(sprintf('CO_2 Gas Saturation at Year %.0f (End of Simulation)', ...
       tYears(end)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation (fraction)';
-
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Figure 9: Pressure buildup deltaP at injection end
 %  Shows where producers are drawing down pressure
 % =========================================================================
 deltaP = (states{injEndStep}.pressure - initState.pressure) / barsa;
-if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(G, deltaP); view(-63,68); colorbar;
 set(gcf,'position',[531 337 923 356]); axis tight;
 title(sprintf('Pressure Buildup \\DeltaP at Year %.0f (bar)', ...
       tYears(injEndStep)), 'FontSize',13);
 c = colorbar; c.Label.String = '\DeltaP (bar)';
-
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Figures 10-11: Vertical cross-sections through grid j=48
 % =========================================================================
 [ic, jc, ~] = ind2sub(G.cartDims, G.cells.indexMap);
 xsecMask = jc==48 & ic>18 & ic<75;
 
-if DISPLAY_FIGURES
 figure('Color','w');
 plotCellData(extractSubgrid(G, xsecMask), ...
              states{injEndStep}.s(xsecMask, 2));
@@ -520,8 +497,6 @@ view(0,0); axis tight; colorbar;
 title(sprintf('Vertical X-Section CO_2 Saturation at Year %.0f (j=48)', ...
       tYears(end)), 'FontSize',13);
 c = colorbar; c.Label.String = 'CO_2 Saturation';
-
-end  % ~HEADLESS
 %% =========================================================================
 % Figure 12: CO2 trapping inventory — manual calculation
 % postprocessStates3D is designed for a single injector and may silently
@@ -569,7 +544,6 @@ mass_injected_cum = cumsum(mass_injected);
 mass_exited = max(mass_injected_cum - mass_free - mass_residual, 0);
 
 % --- Plot
-if DISPLAY_FIGURES
 h1 = figure('Color','w');
 ax  = axes(h1);
 
@@ -595,8 +569,6 @@ grid(ax, 'on');
 xlim(ax, [0 t_trap(end)]);
 % User requested: skip saving co2_trapping_inventory.png
 fprintf('Trapping inventory plot complete.\n\n');
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Figure 13: Well performance - injection rate, brine rate, BHPs
 % =========================================================================
@@ -635,7 +607,6 @@ dtYr         = schedule.step.val / year;
 co2Total     = cumsum(co2MtYr   .* dtYr);
 brineTotal   = cumsum(brineMtYr .* dtYr);
 
-if DISPLAY_FIGURES
 figure('Color','w','Position',[50 50 1400 550]);
 
 % --- Subplot 1: Rates ---
@@ -676,8 +647,6 @@ subplot(1,3,3);
     title('Well Bottom-Hole Pressures','FontSize',12);
     legend(wellNames,'Location','northeast','FontSize',8);
     grid on; set(gca,'FontSize',11);
-
-end  % ~HEADLESS
 %% =========================================================================
 %  Console summary
 % =========================================================================
@@ -958,16 +927,8 @@ fclose(fid);
 
 %% --- Save Figures to Output Folder ---
 try
-    fprintf('Saving figures to output folder ...\n');
-    allowedFigs = { ...
-        'pressure_buildup_injection_end.png', ...
-        'saturation_3d_injection_end.png', ...
-        'saturation_3d_simulation_end.png', ...
-        'saturation_xsec_injection_end.png', ...
-        'saturation_xsec_simulation_end.png', ...
-        'well_performance.png' ...
-    };
-
+    fprintf('Saving ALL figures to output folder ...\n');
+    
     figHandles = findobj('Type', 'figure');
     for f = 1:numel(figHandles)
         figObj = figHandles(f);
@@ -986,7 +947,7 @@ try
             end
         end
         
-        % Map title string to safe file name (only for allowed figures)
+        % Map title string to safe file name
         figName = '';
         if contains(lower(figTitle), 'pressure buildup')
             figName = 'pressure_buildup_injection_end.png';
@@ -1000,55 +961,54 @@ try
             figName = 'saturation_xsec_simulation_end.png';
         elseif contains(lower(figTitle), 'brine production rate') || contains(lower(figTitle), 'bottom-hole pressures') || contains(lower(figTitle), 'cumulative co_2')
             figName = 'well_performance.png';
-        end
-        
-        % Fallback for well performance figure (multi-subplot)
-        if isempty(figName) && figObj.Number == 13
-            figName = 'well_performance.png';
-        end
-        
-        % Save ONLY if figName is in the 6 requested figures!
-        if ~isempty(figName) && ismember(figName, allowedFigs)
-            % Add well markers for 3D plots
-            if contains(figName, 'saturation_3d') || contains(figName, 'pressure_buildup')
-                figure(figObj);
-                hold on;
-                h_inj = []; h_obs = [];
-                injNames = {};
-                % 1. Plot injectors from W
-                for w_idx = 1:numel(W)
-                    if strcmp(W(w_idx).type, 'rate')
-                        injNames{end+1} = W(w_idx).name;
-                        wc = W(w_idx).cells(1);
-                        xw = G.cells.centroids(wc,1); yw = G.cells.centroids(wc,2); zw = G.cells.centroids(wc,3) - 100;
-                        h1 = plot3(xw, yw, zw, 'kv', 'MarkerFaceColor', 'r', 'MarkerSize', 8);
-                        if isempty(h_inj), h_inj = h1; end
-                    end
-                end
-                % 2. Plot surveillance from obsWells
-                for ow = 1:numel(obsWells)
-                    % Skip injectors (they are already plotted as red triangles)
-                    if ismember(obsWells(ow).name, injNames)
-                        continue;
-                    end
-                    % obsWells is defined after W but before this save loop
-                    allCells = vertcat(obsWells(ow).layerCells{:});
-                    if ~isempty(allCells)
-                        wc = allCells(1);
-                        xw = G.cells.centroids(wc,1); yw = G.cells.centroids(wc,2); zw = G.cells.centroids(wc,3) - 100;
-                        h2 = plot3(xw, yw, zw, 'ko', 'MarkerFaceColor', 'b', 'MarkerSize', 8);
-                        if isempty(h_obs), h_obs = h2; end
-                    end
-                end
-                leg_h = []; leg_str = {};
-                if ~isempty(h_inj), leg_h(end+1) = h_inj; leg_str{end+1} = 'Injector'; end
-                if ~isempty(h_obs), leg_h(end+1) = h_obs; leg_str{end+1} = 'Surveillance'; end
-                if ~isempty(leg_h), legend(leg_h, leg_str, 'Location', 'northeast'); end
+        elseif contains(lower(figTitle), 'inventory')
+            figName = 'co2_trapping_inventory.png';
+        else
+            safeTitle = regexprep(lower(figTitle), '[^a-z0-9]+', '_');
+            safeTitle = regexprep(safeTitle, '^_+|_+$', '');
+            if isempty(safeTitle)
+                safeTitle = sprintf('figure_%d', figObj.Number);
             end
-            
-            saveas(figObj, fullfile(outputDir, figName));
-            fprintf('  Saved Figure %d -> %s\n', figObj.Number, figName);
+            figName = [safeTitle, '.png'];
         end
+        
+        % Add well markers for 3D plots
+        if contains(figName, 'saturation_3d') || contains(figName, 'pressure_buildup')
+            figure(figObj);
+            hold on;
+            h_inj = []; h_obs = [];
+            injNames = {};
+            % 1. Plot injectors from W
+            for w_idx = 1:numel(W)
+                if strcmp(W(w_idx).type, 'rate')
+                    injNames{end+1} = W(w_idx).name;
+                    wc = W(w_idx).cells(1);
+                    xw = G.cells.centroids(wc,1); yw = G.cells.centroids(wc,2); zw = G.cells.centroids(wc,3) - 100;
+                    h1 = plot3(xw, yw, zw, 'kv', 'MarkerFaceColor', 'r', 'MarkerSize', 8);
+                    if isempty(h_inj), h_inj = h1; end
+                end
+            end
+            % 2. Plot surveillance from obsWells
+            for ow = 1:numel(obsWells)
+                if ismember(obsWells(ow).name, injNames)
+                    continue;
+                end
+                allCells = vertcat(obsWells(ow).layerCells{:});
+                if ~isempty(allCells)
+                    wc = allCells(1);
+                    xw = G.cells.centroids(wc,1); yw = G.cells.centroids(wc,2); zw = G.cells.centroids(wc,3) - 100;
+                    h2 = plot3(xw, yw, zw, 'ko', 'MarkerFaceColor', 'b', 'MarkerSize', 8);
+                    if isempty(h_obs), h_obs = h2; end
+                end
+            end
+            leg_h = []; leg_str = {};
+            if ~isempty(h_inj), leg_h(end+1) = h_inj; leg_str{end+1} = 'Injector'; end
+            if ~isempty(h_obs), leg_h(end+1) = h_obs; leg_str{end+1} = 'Surveillance'; end
+            if ~isempty(leg_h), legend(leg_h, leg_str, 'Location', 'northeast'); end
+        end
+        
+        saveas(figObj, fullfile(outputDir, figName));
+        fprintf('  Saved Figure %d -> %s\n', figObj.Number, figName);
     end
 catch figErr
     fprintf('Warning: Could not save figures: %s\n', figErr.message);
