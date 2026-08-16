@@ -7,6 +7,7 @@
 # Allow specific project files
 !core/examples/data/Johansen/python/*.py
 !core/examples/data/Johansen/python/*.ipynb
+!core/examples/data/Johansen/python/*.pdf
 !core/examples/data/Johansen/python/*.json
 !core/examples/data/Johansen/data/*.csv
 !core/examples/data/Johansen/data/*.pptx
