@@ -14,11 +14,11 @@
 !co2lab/co2lab-ve/examples/example3DJohansen.m
 !co2lab/co2lab-ve/examples/run_batch_simulations.m
 !.gitignore
-!./results
-README.md
+!results/
+!results/*
+!README.md
+!LICENSE
 
 # Explicitly ignore data, models, and images even in allowed directories
 
 core/examples/data/Johansen/well_csvs/
-LICENSE
-README.md
