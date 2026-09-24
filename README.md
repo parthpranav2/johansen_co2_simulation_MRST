@@ -525,3 +525,5 @@ MRST is © 2009–2026 SINTEF Digital, Mathematics & Cybernetics, and is distrib
 *"Maximising CO₂ storage capacity whilst keeping the caprock intact — one Bayesian trial at a time."*
 
 </div>
+
+[Workflow](diagram3.png)
