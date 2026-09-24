@@ -526,4 +526,4 @@ MRST is © 2009–2026 SINTEF Digital, Mathematics & Cybernetics, and is distrib
 
 </div>
 
-[Workflow](diagram3.png)
+![Workflow](diagram3.png)
